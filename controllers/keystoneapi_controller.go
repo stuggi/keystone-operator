@@ -17,7 +17,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -34,6 +36,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	v1accore "k8s.io/client-go/applyconfigurations/core/v1"
+	v1acmeta "k8s.io/client-go/applyconfigurations/meta/v1"
+
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,11 +76,11 @@ type KeystoneAPIReconciler struct {
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis/finalizers,verbs=update
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete;
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete;
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;delete;
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;create;update;delete;
 
@@ -98,20 +103,63 @@ func (r *KeystoneAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Secret
-	secret := keystone.FernetSecret(instance, instance.Name)
-	// Check if this Secret already exists
+	// is this correct, or one per controller?
+	fieldMgr := instance.Name
+	fernetSecretName := fmt.Sprintf("keystone-" + instance.Name)
 	foundSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, foundSecret)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: fernetSecretName, Namespace: instance.Namespace}, foundSecret)
 	if err != nil && k8s_errors.IsNotFound(err) {
-		r.Log.Info("Creating a new Secret", "Secret.Namespace", secret.Namespace, "Job.Name", secret.Name)
-		err = r.Client.Create(ctx, secret)
+		r.Log.Info("Creating a new Secret", "Secret.Namespace", instance.Namespace, "Secret.Name", fernetSecretName)
+		fernetSecretName := fmt.Sprintf("keystone-" + instance.Name)
+		//oref := metav1.NewControllerRef(instance, instance.GroupVersionKind())
+		//https://github.com/kubernetes/apimachinery/blob/v0.23.6/pkg/apis/meta/v1/controller_ref.go#L54
+		blockOwnerDeletion := true
+		isController := true
+		gvk := instance.GroupVersionKind()
+		name := instance.GetName()
+		uid := instance.GetUID()
+		apiversion := gvk.GroupVersion().String()
+		oref := &v1acmeta.OwnerReferenceApplyConfiguration{
+			APIVersion:         &apiversion,
+			Kind:               &gvk.Kind,
+			Name:               &name,
+			UID:                &uid,
+			BlockOwnerDeletion: &blockOwnerDeletion,
+			Controller:         &isController,
+		}
+
+		secretClient := r.Kclient.CoreV1().Secrets(instance.Namespace)
+		secretApplyConfig := v1accore.Secret(fernetSecretName, instance.Namespace).WithOwnerReferences(oref)
+		secretApplyConfig.StringData = map[string]string{
+			"0": keystone.GenerateFernetKey(),
+			"1": keystone.GenerateFernetKey(),
+		}
+
+		secret, err := secretClient.Apply(ctx, secretApplyConfig, metav1.ApplyOptions{FieldManager: fieldMgr, Force: true})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
 		if err := controllerutil.SetControllerReference(instance, secret, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
+
+	/*
+		// Check if this Secret already exists
+		foundSecret := &corev1.Secret{}
+		err = r.Client.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, foundSecret)
+		if err != nil && k8s_errors.IsNotFound(err) {
+			r.Log.Info("Creating a new Secret", "Secret.Namespace", secret.Namespace, "Job.Name", secret.Name)
+			err = r.Client.Create(ctx, secret)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := controllerutil.SetControllerReference(instance, secret, r.Scheme); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	*/
 
 	// ConfigMap
 	configMapVars := make(map[string]common.EnvSetter)
@@ -381,8 +429,8 @@ func (r *KeystoneAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&routev1.Route{}).
 		Complete(r)
-		//Owns(&routev1.Route{}).
 }
 
 func (r *KeystoneAPIReconciler) setDbSyncHash(ctx context.Context, instance *keystonev1beta1.KeystoneAPI, hashStr string) error {
@@ -553,4 +601,13 @@ func (r *KeystoneAPIReconciler) reconcileConfigMap(ctx context.Context, instance
 	})
 
 	return err
+}
+
+func generateFernetKey() string {
+	rand.Seed(time.Now().UnixNano())
+	data := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		data[i] = byte(rand.Intn(10))
+	}
+	return base64.StdEncoding.EncodeToString(data)
 }

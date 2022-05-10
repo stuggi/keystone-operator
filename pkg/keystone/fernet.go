@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func generateFernetKey() string {
+func GenerateFernetKey() string {
 	rand.Seed(time.Now().UnixNano())
 	data := make([]byte, 32)
 	for i := 0; i < 32; i++ {
@@ -30,8 +30,8 @@ func FernetSecret(cr *keystonev1beta1.KeystoneAPI, name string) *corev1.Secret {
 		},
 		Type: "Opaque",
 		StringData: map[string]string{
-			"0": generateFernetKey(),
-			"1": generateFernetKey(),
+			"0": GenerateFernetKey(),
+			"1": GenerateFernetKey(),
 		},
 	}
 	return secret

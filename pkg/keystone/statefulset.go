@@ -9,11 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Deployment func
-func Deployment(
+// StatefulSet func
+func StatefulSet(
 	cr *keystonev1beta1.KeystoneAPI,
 	configHash string,
-) (*appsv1.Deployment, error) {
+) *appsv1.StatefulSet {
 	runAsUser := int64(0)
 
 	labels := map[string]string{
@@ -32,12 +32,12 @@ func Deployment(
 	envVars["KOLLA_CONFIG_STRATEGY"] = common.EnvValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = common.EnvValue(configHash)
 
-	deployment := &appsv1.Deployment{
+	deployment := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,
 			Namespace: cr.Namespace,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -79,5 +79,5 @@ func Deployment(
 	}
 	deployment.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 
-	return deployment, nil
+	return deployment
 }

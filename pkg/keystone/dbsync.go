@@ -1,28 +1,46 @@
 package keystone
 
 import (
-	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	"context"
+
+	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // DbSyncJob func
-func DbSyncJob(cr *keystonev1beta1.KeystoneAPI, cmName string) (*batchv1.Job, error) {
+func DbSyncJob(
+	ctx context.Context,
+	c client.Client,
+	cr *keystonev1.KeystoneAPI,
+	//obj client.Object,
+	//schema *runtime.Scheme,
+	//dbOptions Options,
+) (*batchv1.Job, error) {
 	runAsUser := int64(0)
-
-	passwordInitCmd, err := common.ExecuteTemplateFile("password_init.sh", nil)
-	if err != nil {
-		return nil, err
-	}
 
 	labels := map[string]string{
 		"app": "keystone-api",
 	}
+
+	args := []string{"-c"}
+	if cr.Spec.Debug.DBSync {
+		args = append(args, DebugCommand)
+	} else {
+		args = append(args, DBSyncCommand)
+	}
+
+	envVars := map[string]common.EnvSetter{}
+	envVars["KOLLA_CONFIG_FILE"] = common.EnvValue(KollaConfig)
+	envVars["KOLLA_CONFIG_STRATEGY"] = common.EnvValue("COPY_ALWAYS")
+	envVars["KOLLA_BOOTSTRAP"] = common.EnvValue("true")
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName + "-db-sync",
+			Name:      ServiceName + "-db-sync",
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
@@ -33,73 +51,35 @@ func DbSyncJob(cr *keystonev1beta1.KeystoneAPI, cmName string) (*batchv1.Job, er
 					ServiceAccountName: "keystone-operator-keystone",
 					Containers: []corev1.Container{
 						{
-							Name: "keystone-db-sync",
-							//Command: []string{"/bin/sleep", "7000"},
+							Name: ServiceName + "-db-sync",
+							Command: []string{
+								"/bin/bash",
+							},
+							Args:  args,
 							Image: cr.Spec.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,
 							},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "KOLLA_CONFIG_STRATEGY",
-									Value: "COPY_ALWAYS",
-								},
-								{
-									Name:  "KOLLA_BOOTSTRAP",
-									Value: "TRUE",
-								},
-							},
+							Env:          common.MergeEnvs([]corev1.EnvVar{}, envVars),
 							VolumeMounts: getVolumeMounts(),
-						},
-					},
-					InitContainers: []corev1.Container{
-						{
-							Name:    "keystone-secrets",
-							Image:   cr.Spec.ContainerImage,
-							Command: []string{"/bin/sh", "-c", passwordInitCmd},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "DatabaseHost",
-									Value: cr.Spec.DatabaseHostname,
-								},
-								{
-									Name:  "DatabaseUser",
-									Value: cr.Name,
-								},
-								{
-									Name:  "DatabaseSchema",
-									Value: cr.Name,
-								},
-								{
-									Name: "DatabasePassword",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: cr.Spec.Secret,
-											},
-											Key: "DatabasePassword",
-										},
-									},
-								},
-								{
-									Name: "AdminPassword",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: cr.Spec.Secret,
-											},
-											Key: "AdminPassword",
-										},
-									},
-								},
-							},
-							VolumeMounts: getInitVolumeMounts(),
 						},
 					},
 				},
 			},
 		},
 	}
-	job.Spec.Template.Spec.Volumes = getVolumes(cmName)
+
+	job.Spec.Template.Spec.Volumes = getVolumes(ServiceName)
+
+	initContainerDetails := APIDetails{
+		ContainerImage: cr.Spec.ContainerImage,
+		DatabaseHost:   cr.Spec.DatabaseHostname,
+		DatabaseUser:   cr.Spec.DatabaseUser,
+		DatabaseName:   DatabaseName,
+		OSPSecret:      cr.Spec.Secret,
+		VolumeMounts:   getInitVolumeMounts(),
+	}
+	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
+
 	return job, nil
 }

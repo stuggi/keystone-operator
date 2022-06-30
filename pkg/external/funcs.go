@@ -175,13 +175,13 @@ func (ks *KeystoneService) CreateOrPatch(
 	})
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			h.GetLogger().Info(fmt.Sprintf("%s %s not found, reconcile in %ds", service.Kind, service.Name, ks.timeout))
+			h.GetLogger().Info(fmt.Sprintf("KeystoneService %s not found, reconcile in %ds", service.Name, ks.timeout))
 			return ctrl.Result{RequeueAfter: time.Duration(ks.timeout) * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		h.GetLogger().Info(fmt.Sprintf("%s %s - %s", service.Kind, service.Name, op))
+		h.GetLogger().Info(fmt.Sprintf("KeystoneService %s - %s", service.Name, op))
 	}
 
 	// update the service object of the KeystoneService type
@@ -198,6 +198,36 @@ func (ks *KeystoneService) CreateOrPatch(
 // GetServiceID - returns the openstack service ID
 func (ks *KeystoneService) GetServiceID() string {
 	return ks.id
+}
+
+// Delete - deletes a KeystoneService if it exists.
+func (ks *KeystoneService) Delete(
+	ctx context.Context,
+	h *helper.Helper,
+) error {
+
+	service, err := GetKeystoneServiceWithName(ctx, h, ks.service.Name, ks.service.Namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	err = h.GetClient().Delete(ctx, service, &client.DeleteOptions{})
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	// Service is deleted so remove the finalizer.
+	controllerutil.RemoveFinalizer(service, h.GetFinalizer())
+	if err := h.GetClient().Update(ctx, service); err != nil && !k8s_errors.IsNotFound(err) {
+		return err
+	}
+
+	h.GetLogger().Info(fmt.Sprintf("KeystoneService %s in namespace %s deleted", service.Name, service.Namespace))
+
+	return nil
 }
 
 // GetKeystoneServiceWithName func

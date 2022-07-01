@@ -83,4 +83,4 @@ require (
 // replace github.com/openstack-k8s-operators/lib-common => github.com/<account>/lib-common v0.0.0-20220610121238-abedf5879ca4
 // replace github.com/openstack-k8s-operators/lib-common => /path/to/local/repo
 
-replace github.com/openstack-k8s-operators/lib-common => github.com/stuggi/lib-common v0.0.0-20220630135955-d1553ab886d6
+replace github.com/openstack-k8s-operators/lib-common => github.com/stuggi/lib-common v0.0.0-20220701094816-1b55d03870bf

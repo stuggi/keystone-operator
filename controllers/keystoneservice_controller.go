@@ -19,16 +19,14 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
-	gophercloud "github.com/gophercloud/gophercloud"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	external "github.com/openstack-k8s-operators/keystone-operator/pkg/external"
 	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
-	gopher "github.com/openstack-k8s-operators/lib-common/pkg/gopher"
 	helper "github.com/openstack-k8s-operators/lib-common/pkg/helper"
+	"github.com/openstack-k8s-operators/lib-common/pkg/openstack"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -135,21 +133,47 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	//
 	// get admin authentication details from keystoneAPI
 	//
-	identityClient, cond, ctrlResult, err := external.GetAdminServiceClient(ctx, helper, keystoneAPI)
+	// get public endpoint as authurl from keystone instance
+	authURL, err := keystoneAPI.GetEndpoint(common.EndpointPublic)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// get the password of the admin user from Spec.Secret
+	// using PasswordSelectors.Admin
+	authPassword, cond, ctrlResult, err := common.GetDataFromSecret(
+		ctx,
+		helper,
+		keystoneAPI.Spec.Secret,
+		10,
+		keystoneAPI.Spec.PasswordSelectors.Admin)
 	instance.Status.Conditions.UpdateCurrentCondition(cond)
 	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
+		return ctrl.Result{}, err
+	}
+	if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
+	}
+
+	os, err := openstack.NewOpenStack(openstack.AuthOpts{
+		AuthURL:    authURL,
+		Username:   keystoneAPI.Spec.AdminUser,
+		Password:   authPassword,
+		TenantName: keystoneAPI.Spec.AdminProject,
+		DomainName: "Default",
+		Region:     keystoneAPI.Spec.Region,
+	})
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Handle service delete
 	if !instance.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, instance, helper, keystoneAPI, identityClient)
+		return r.reconcileDelete(ctx, instance, helper, os)
 	}
 
 	// Handle non-deleted clusters
-	return r.reconcileNormal(ctx, instance, helper, keystoneAPI, identityClient)
+	return r.reconcileNormal(ctx, instance, helper, os)
 
 }
 
@@ -164,25 +188,33 @@ func (r *KeystoneServiceReconciler) reconcileDelete(
 	ctx context.Context,
 	instance *keystonev1.KeystoneService,
 	helper *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
-	identityClient *gophercloud.ServiceClient,
+	os *openstack.OpenStack,
 ) (ctrl.Result, error) {
 	r.Log.Info("Reconciling Service delete")
 
 	// Delete Endpoints
-	err := gopher.DeleteEndpoints(
-		identityClient,
-		r.Log,
-		instance.Status.ServiceID,
-		instance.Spec.ServiceName,
-		keystoneAPI.Spec.Region)
-	if err != nil {
-		return ctrl.Result{}, err
+	for endpointInterface := range instance.Spec.APIEndpoints {
+		// get the gopher availability mapping for the endpointInterface
+		availability, err := openstack.GetAvailability(endpointInterface)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		err = os.DeleteEndpoint(
+			r.Log,
+			openstack.Endpoint{
+				Name:         instance.Spec.ServiceName,
+				ServiceID:    instance.Status.ServiceID,
+				Availability: availability,
+			},
+		)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Delete User
-	err = gopher.DeleteUser(
-		identityClient,
+	err := os.DeleteUser(
 		r.Log,
 		instance.Spec.ServiceUser)
 	if err != nil {
@@ -190,7 +222,9 @@ func (r *KeystoneServiceReconciler) reconcileDelete(
 	}
 
 	// Delete Service
-	err = gopher.DeleteService(identityClient, r.Log, instance.Status.ServiceID)
+	err = os.DeleteService(
+		r.Log,
+		instance.Status.ServiceID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -209,8 +243,7 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 	ctx context.Context,
 	instance *keystonev1.KeystoneService,
 	helper *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
-	identityClient *gophercloud.ServiceClient,
+	os *openstack.OpenStack,
 ) (ctrl.Result, error) {
 	r.Log.Info("Reconciling Service")
 
@@ -224,7 +257,7 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 	//
 	// Create new service if ServiceID is not already set
 	//
-	err := r.reconcileService(identityClient, instance)
+	err := r.reconcileService(instance, os)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -233,11 +266,8 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 	// create/update/delete endpoint
 	//
 	err = r.reconcileEndpoints(
-		identityClient,
-		instance.Status.ServiceID,
-		instance.Spec.ServiceName,
-		keystoneAPI.Spec.Region,
-		instance.Spec.APIEndpoints)
+		instance,
+		os)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -248,8 +278,8 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 	ctrlResult, err := r.reconcileUser(
 		ctx,
 		helper,
-		identityClient,
-		instance)
+		instance,
+		os)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -261,8 +291,8 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 }
 
 func (r *KeystoneServiceReconciler) reconcileService(
-	client *gophercloud.ServiceClient,
 	instance *keystonev1.KeystoneService,
+	os *openstack.OpenStack,
 ) error {
 	r.Log.Info(fmt.Sprintf("Reconciling Service %s", instance.Spec.ServiceName))
 
@@ -271,8 +301,8 @@ func (r *KeystoneServiceReconciler) reconcileService(
 
 		// verify if there is still an existing service in keystone for
 		// type and name, if so register the ID
-		service, err := gopher.GetService(
-			client,
+		service, err := os.GetService(
+			r.Log,
 			instance.Spec.ServiceType,
 			instance.Spec.ServiceName,
 		)
@@ -284,27 +314,29 @@ func (r *KeystoneServiceReconciler) reconcileService(
 		if service != nil && instance.Status.ServiceID != service.ID {
 			instance.Status.ServiceID = service.ID
 		} else {
-			instance.Status.ServiceID, err = gopher.CreateService(
-				client,
-				instance.Spec.ServiceName,
-				instance.Spec.ServiceType,
-				instance.Spec.ServiceDescription,
-				instance.Spec.Enabled,
-			)
+			instance.Status.ServiceID, err = os.CreateService(
+				r.Log,
+				openstack.Service{
+					Name:        instance.Spec.ServiceName,
+					Type:        instance.Spec.ServiceType,
+					Description: instance.Spec.ServiceDescription,
+					Enabled:     instance.Spec.Enabled,
+				})
 			if err != nil {
 				return err
 			}
 		}
 	} else {
 		// ServiceID is already set, update the service
-		err := gopher.UpdateService(
-			client,
-			instance.Spec.ServiceName,
-			instance.Status.ServiceID,
-			instance.Spec.ServiceType,
-			instance.Spec.ServiceDescription,
-			instance.Spec.Enabled,
-		)
+		err := os.UpdateService(
+			r.Log,
+			openstack.Service{
+				Name:        instance.Spec.ServiceName,
+				Type:        instance.Spec.ServiceType,
+				Description: instance.Spec.ServiceDescription,
+				Enabled:     instance.Spec.Enabled,
+			},
+			instance.Status.ServiceID)
 		if err != nil {
 			return err
 		}
@@ -315,79 +347,60 @@ func (r *KeystoneServiceReconciler) reconcileService(
 }
 
 func (r *KeystoneServiceReconciler) reconcileEndpoints(
-	client *gophercloud.ServiceClient,
-	serviceID string,
-	serviceName string,
-	region string,
-	serviceEndpoints map[string]string,
+	instance *keystonev1.KeystoneService,
+	os *openstack.OpenStack,
 ) error {
 	r.Log.Info("Reconciling Endpoints")
 
-	// get all registered endpoints for the service
-	allEndpoints, err := gopher.GetEndpoints(client, serviceID, region, "")
-	if err != nil {
-		return err
-	}
+	// create / update endpoints
+	for endpointInterface, url := range instance.Spec.APIEndpoints {
 
-	// create a map[string]string of the existing endpoints to verify if
-	// something changed
-	existingServiceEndpoints := make(map[string]string)
-	existingServiceEndpointsIDX := make(map[string]int)
-	for idx, endpoint := range allEndpoints {
-		existingServiceEndpoints[string(endpoint.Availability)] = endpoint.URL
-		existingServiceEndpointsIDX[string(endpoint.Availability)] = idx
-	}
-
-	if !reflect.DeepEqual(existingServiceEndpoints, serviceEndpoints) {
-		// service endpoint got removed
-		if len(serviceEndpoints) < len(existingServiceEndpoints) {
-			for endpointInterface := range existingServiceEndpoints {
-				if url, ok := serviceEndpoints[endpointInterface]; !ok {
-					// TODO delete endpoint
-					r.Log.Info(fmt.Sprintf("Delete endpoint %s %s - %s", serviceName, endpointInterface, url))
-				}
-			}
+		// get the gopher availability mapping for the endpointInterface
+		availability, err := openstack.GetAvailability(endpointInterface)
+		if err != nil {
+			return err
 		}
 
-		// create / update endpoints
-		for endpointInterface, url := range serviceEndpoints {
-			// get the gopher availability mapping for the endpointInterface
-			availability, err := gopher.GetAvailability(endpointInterface)
-			if err != nil {
-				return err
-			}
+		// get registered endpoints for the service and endpointInterface
+		allEndpoints, err := os.GetEndpoints(
+			r.Log,
+			instance.Status.ServiceID,
+			endpointInterface)
+		if err != nil {
+			return err
+		}
 
-			if existingURL, ok := existingServiceEndpoints[endpointInterface]; ok {
-				if url != existingURL {
-					endpointIDX := existingServiceEndpointsIDX[endpointInterface]
-
-					// Update the endpoint
-					_, err := gopher.UpdateEndpoint(
-						client,
-						r.Log,
-						allEndpoints[endpointIDX].ID,
-						serviceID,
-						serviceName,
-						availability,
-						region,
-						url)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				// Create the endpoint
-				_, err := gopher.CreateEndpoint(
-					client,
+		if len(allEndpoints) == 1 {
+			endpoint := allEndpoints[0]
+			if url != endpoint.URL {
+				// Update the endpoint
+				_, err := os.UpdateEndpoint(
 					r.Log,
-					serviceID,
-					serviceName,
-					availability,
-					region,
-					url)
+					openstack.Endpoint{
+						Name:         endpoint.Name,
+						ServiceID:    endpoint.ServiceID,
+						Availability: availability,
+						URL:          url,
+					},
+					endpoint.ID,
+				)
 				if err != nil {
 					return err
 				}
+			}
+		} else {
+			// Create the endpoint
+			_, err := os.CreateEndpoint(
+				r.Log,
+				openstack.Endpoint{
+					Name:         instance.Spec.ServiceName,
+					ServiceID:    instance.Status.ServiceID,
+					Availability: availability,
+					URL:          url,
+				},
+			)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -399,8 +412,8 @@ func (r *KeystoneServiceReconciler) reconcileEndpoints(
 func (r *KeystoneServiceReconciler) reconcileUser(
 	ctx context.Context,
 	h *helper.Helper,
-	client *gophercloud.ServiceClient,
 	instance *keystonev1.KeystoneService,
+	os *openstack.OpenStack,
 ) (reconcile.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling User %s", instance.Spec.ServiceUser))
 	roleName := "admin"
@@ -422,7 +435,12 @@ func (r *KeystoneServiceReconciler) reconcileUser(
 	//
 	//  create service project if it does not exist
 	//
-	serviceProjectID, err := gopher.CreateProject(client, r.Log, "service", "service")
+	serviceProjectID, err := os.CreateProject(
+		r.Log,
+		openstack.Project{
+			Name:        "service",
+			Description: "service",
+		})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -430,7 +448,9 @@ func (r *KeystoneServiceReconciler) reconcileUser(
 	//
 	//  create role if it does not exist
 	//
-	_, err = gopher.CreateRole(client, r.Log, roleName)
+	_, err = os.CreateRole(
+		r.Log,
+		roleName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -438,7 +458,13 @@ func (r *KeystoneServiceReconciler) reconcileUser(
 	//
 	// create user if it does not exist
 	//
-	userID, err := gopher.CreateUser(client, r.Log, instance.Spec.ServiceUser, password, serviceProjectID)
+	userID, err := os.CreateUser(
+		r.Log,
+		openstack.User{
+			Name:      instance.Spec.ServiceUser,
+			Password:  password,
+			ProjectID: serviceProjectID,
+		})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -446,7 +472,11 @@ func (r *KeystoneServiceReconciler) reconcileUser(
 	//
 	// add user to admin role
 	//
-	err = gopher.AssignUserRole(client, r.Log, roleName, userID, serviceProjectID)
+	err = os.AssignUserRole(
+		r.Log,
+		roleName,
+		userID,
+		serviceProjectID)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

@@ -26,7 +26,7 @@ import (
 	external "github.com/openstack-k8s-operators/keystone-operator/pkg/external"
 	common "github.com/openstack-k8s-operators/lib-common/pkg/common"
 	helper "github.com/openstack-k8s-operators/lib-common/pkg/helper"
-	"github.com/openstack-k8s-operators/lib-common/pkg/openstack"
+	openstack "github.com/openstack-k8s-operators/lib-common/pkg/openstack"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -131,40 +131,19 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	//
-	// get admin authentication details from keystoneAPI
+	// get admin authentication OpenStack
 	//
-	// get public endpoint as authurl from keystone instance
-	authURL, err := keystoneAPI.GetEndpoint(common.EndpointPublic)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// get the password of the admin user from Spec.Secret
-	// using PasswordSelectors.Admin
-	authPassword, cond, ctrlResult, err := common.GetDataFromSecret(
+	os, cond, ctrlResult, err := external.GetAdminServiceClient(
 		ctx,
 		helper,
-		keystoneAPI.Spec.Secret,
-		10,
-		keystoneAPI.Spec.PasswordSelectors.Admin)
+		keystoneAPI,
+	)
 	instance.Status.Conditions.UpdateCurrentCondition(cond)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
-	}
-
-	os, err := openstack.NewOpenStack(openstack.AuthOpts{
-		AuthURL:    authURL,
-		Username:   keystoneAPI.Spec.AdminUser,
-		Password:   authPassword,
-		TenantName: keystoneAPI.Spec.AdminProject,
-		DomainName: "Default",
-		Region:     keystoneAPI.Spec.Region,
-	})
-	if err != nil {
-		return ctrl.Result{}, err
 	}
 
 	// Handle service delete

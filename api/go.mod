@@ -3,7 +3,7 @@ module github.com/openstack-k8s-operators/keystone-operator/api
 go 1.18
 
 require (
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20220816094529-135dc67c2cdf
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20220909175216-e774739df18a
 	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20220909175216-e774739df18a
 	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3
@@ -68,3 +68,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20220914091127-6f9fb7debfda
+
+replace github.com/openstack-k8s-operators/lib-common/modules/database => github.com/stuggi/lib-common/modules/database v0.0.0-20220914091127-6f9fb7debfda

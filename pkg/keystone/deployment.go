@@ -92,6 +92,9 @@ func Deployment(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName,
 			Namespace: instance.Namespace,
+			Annotations: map[string]string{
+				"k8s.v1.cni.cncf.io/networks": `[{"name": "internalapi", "namespace": "openstack","ips":["172.17.0.101/24"]},{"name": "storage", "namespace": "openstack", "ips": ["172.18.0.101/24"]}]`,
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{

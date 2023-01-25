@@ -327,15 +327,26 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	// expose the service (create service, route and return the created endpoint URLs)
 	//
 	var keystonePorts = map[endpoint.Endpoint]endpoint.Data{
-		endpoint.EndpointAdmin: endpoint.Data{
-			Port: keystone.KeystoneAdminPort,
-		},
 		endpoint.EndpointPublic: endpoint.Data{
 			Port: keystone.KeystonePublicPort,
 		},
 		endpoint.EndpointInternal: endpoint.Data{
 			Port: keystone.KeystoneInternalPort,
 		},
+		endpoint.EndpointAdmin: endpoint.Data{
+			Port: keystone.KeystoneAdminPort,
+		},
+	}
+
+	for _, metallbcfg := range instance.Spec.ExternalEndpoints {
+		portCfg := keystonePorts[metallbcfg.Endpoint]
+		portCfg.MetalLB = &endpoint.MetalLBData{
+			AddressPool: metallbcfg.IPAddressPool,
+			SharedIP:    metallbcfg.SharedIP,
+			IP:          metallbcfg.IP,
+		}
+
+		keystonePorts[metallbcfg.Endpoint] = portCfg
 	}
 
 	apiEndpoints, ctrlResult, err := endpoint.ExposeEndpoints(
@@ -596,7 +607,7 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	if instance.Status.ReadyCount > 0 {
 		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 	}
-	instance.Status.Networks = instance.Spec.NetworkAttachmentDefinitions
+	instance.Status.NetworkAttachments = instance.Spec.NetworkAttachments
 	// create Deployment - end
 
 	//

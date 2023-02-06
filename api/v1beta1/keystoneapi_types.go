@@ -127,11 +127,11 @@ type KeystoneAPISpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	// Networks list of NetworkAttachment to expose the services to
+	// NetworkAttachments is a list of NetworkAttachment resource names to expose the services to the given network
 	NetworkAttachments []string `json:"networkAttachments"`
 
 	// +kubebuilder:validation:Optional
-	// ExternalEndpoints, expose a VIP via MetalLB on the pre-created address pool
+	// ExternalEndpoints, expose a VIP using a pre-created IPAddressPool
 	ExternalEndpoints []MetalLBConfig `json:"externalEndpoints"`
 }
 
@@ -142,17 +142,19 @@ type MetalLBConfig struct {
 	// Endpoint, OpenStack endpoint this service maps to
 	Endpoint endpoint.Endpoint `json:"endpoint"`
 
-	// IPAddressPool if set, expose VIP via MetalLB on the address pool
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// IPAddressPool expose VIP via MetalLB on the IPAddressPool
 	IPAddressPool string `json:"ipAddressPool"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=true
-	// SharedIP if true, VIP is shared with multiple services
+	// SharedIP if true, VIP/VIPs get shared with multiple services
 	SharedIP bool `json:"sharedIP"`
 
 	// +kubebuilder:validation:Optional
-	// IP, request given IP if available
-	IP string `json:"ip"`
+	// LoadBalancerIPs, request given IPs from the pool if available. Using a list to allow dual stack (IPv4/IPv6) support
+	LoadBalancerIPs []string `json:"loadBalancerIPs"`
 }
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret

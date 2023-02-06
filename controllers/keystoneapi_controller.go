@@ -25,6 +25,7 @@ import (
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	keystone "github.com/openstack-k8s-operators/keystone-operator/pkg/keystone"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/annotations"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	deployment "github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
@@ -216,6 +217,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	instance *keystonev1.KeystoneAPI,
 	helper *helper.Helper,
 	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
 ) (ctrl.Result, error) {
 	r.Log.Info("Reconciling Service init")
 
@@ -282,11 +284,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	// run keystone db sync
 	//
 	dbSyncHash := instance.Status.Hash[keystonev1.DbSyncHash]
-	jobDef, err := keystone.DbSyncJob(instance, serviceLabels)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
+	jobDef := keystone.DbSyncJob(instance, serviceLabels, serviceAnnotations)
 	dbSyncjob := job.NewJob(
 		jobDef,
 		keystonev1.DbSyncHash,
@@ -338,9 +336,9 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	for _, metallbcfg := range instance.Spec.ExternalEndpoints {
 		portCfg := keystonePorts[metallbcfg.Endpoint]
 		portCfg.MetalLB = &endpoint.MetalLBData{
-			AddressPool: metallbcfg.IPAddressPool,
-			SharedIP:    metallbcfg.SharedIP,
-			IP:          metallbcfg.IP,
+			IPAddressPool:   metallbcfg.IPAddressPool,
+			SharedIP:        metallbcfg.SharedIP,
+			LoadBalancerIPs: metallbcfg.LoadBalancerIPs,
 		}
 
 		keystonePorts[metallbcfg.Endpoint] = portCfg
@@ -385,11 +383,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	//
 	// BootStrap Job
 	//
-	jobDef, err = keystone.BootstrapJob(instance, serviceLabels, instance.Status.APIEndpoints)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
+	jobDef = keystone.BootstrapJob(instance, serviceLabels, serviceAnnotations, instance.Status.APIEndpoints)
 	bootstrapjob := job.NewJob(
 		jobDef,
 		keystonev1.BootstrapHash,
@@ -544,8 +538,17 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 		common.AppSelector: keystone.ServiceName,
 	}
 
+	// networks to attach to
+	serviceAnnotations, err := annotations.GetNADAnnotation(instance.Namespace, instance.Spec.NetworkAttachments)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed create network annotation from %s: %w",
+			instance.Spec.NetworkAttachments, err)
+	}
+
+	//job.Spec.Template.Annotations = util.MergeStringMaps(job.Spec.Template.Annotations, nwAnnotation)
+
 	// Handle service init
-	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels)
+	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -573,11 +576,7 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	//
 
 	// Define a new Deployment object
-	deplDef, err := keystone.Deployment(instance, inputHash, serviceLabels)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
+	deplDef := keystone.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
 	depl := deployment.NewDeployment(
 		deplDef,
 		5,

@@ -17,7 +17,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - description: NetworkAttachments
-      jsonPath: .status.networkAttachments
+      jsonPath: .spec.networkAttachments
       name: NetworkAttachments
       type: string
     - description: Status
@@ -304,11 +304,12 @@ spec:
                 description: Map of hashes to track e.g. job status
                 type: object
               networkAttachments:
-                description: NetworkAttachments in addtion to the cluster network,
-                  the service is attached to
-                items:
-                  type: string
-                type: array
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: NetworkAttachments status of the deployment pods
+                type: object
               readyCount:
                 description: ReadyCount of keystone API instances
                 format: int32

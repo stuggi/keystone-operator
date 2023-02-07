@@ -20,6 +20,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.2
 )
 
+require github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -83,4 +85,4 @@ replace github.com/openstack-k8s-operators/keystone-operator/api => ./api
 // ../go/pkg/mod/k8s.io/apimachinery@v0.24.3/pkg/util/managedfields/gvkparser.go:62:39: cannot use smdschema.Schema{…} (value of type "sigs.k8s.io/structured-merge-diff/v4/schema".Schema) as type *"sigs.k8s.io/structured-merge-diff/v4/schema".Schema in struct literal
 replace sigs.k8s.io/structured-merge-diff/v4 v4.2.2 => sigs.k8s.io/structured-merge-diff/v4 v4.2.1
 
-replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20230206155159-4d45bbd40cca
+replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20230207115535-adb0939a6c2e

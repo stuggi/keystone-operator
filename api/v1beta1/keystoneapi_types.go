@@ -203,13 +203,13 @@ type KeystoneAPIStatus struct {
 	// Keystone Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
-	// NetworkAttachments in addtion to the cluster network, the service is attached to
-	NetworkAttachments []string `json:"networkAttachments,omitempty"`
+	// NetworkAttachments status of the deployment pods
+	NetworkAttachments map[string][]string `json:"networkAttachments,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="NetworkAttachments",type="string",JSONPath=".status.networkAttachments",description="NetworkAttachments"
+//+kubebuilder:printcolumn:name="NetworkAttachments",type="string",JSONPath=".spec.networkAttachments",description="NetworkAttachments"
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 //+kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 

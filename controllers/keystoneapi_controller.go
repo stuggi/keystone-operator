@@ -27,6 +27,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
+	cronjob "github.com/openstack-k8s-operators/lib-common/modules/common/cronjob"
 	deployment "github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
 	endpoint "github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
 	env "github.com/openstack-k8s-operators/lib-common/modules/common/env"
@@ -90,6 +91,7 @@ type KeystoneAPIReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete;
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete;
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete;
@@ -189,6 +191,7 @@ func (r *KeystoneAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&keystonev1.KeystoneAPI{}).
 		Owns(&mariadbv1.MariaDBDatabase{}).
 		Owns(&batchv1.Job{}).
+		Owns(&batchv1.CronJob{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
@@ -654,8 +657,23 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	if instance.Status.ReadyCount > 0 {
 		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 	}
-
 	// create Deployment - end
+
+	// create CronJob
+	cronjobDef := keystone.CronJob(instance, serviceLabels, serviceAnnotations)
+	cronjob := cronjob.NewCronJob(
+		cronjobDef,
+		time.Duration(5)*time.Second,
+	)
+
+	ctrlResult, err = cronjob.CreateOrPatch(ctx, helper)
+	if err != nil {
+		// TODO: Do we need a different status ?
+		return ctrl.Result{}, err
+	} else if (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, nil
+	}
+	// create CronJob - end
 
 	//
 	// create OpenStackClient config

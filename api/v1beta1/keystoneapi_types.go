@@ -90,6 +90,16 @@ type KeystoneAPISpec struct {
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=""
+	// TrustFlushArgs - Arguments added to keystone-manage trust_flush command
+	TrustFlushArgs string `json:"trustFlushArgs"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="1 * * * *"
+	// TrustFlushSchedule - Schedule to purge expired or soft-deleted trusts from database
+	TrustFlushSchedule string `json:"trustFlushSchedule"`
+
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:default={database: KeystoneDatabasePassword, admin: AdminPassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`

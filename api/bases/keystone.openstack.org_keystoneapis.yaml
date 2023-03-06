@@ -249,6 +249,16 @@ spec:
                 description: Secret containing OpenStack password information for
                   keystone KeystoneDatabasePassword, AdminPassword
                 type: string
+              trustFlushArgs:
+                default: ""
+                description: TrustFlushArgs - Arguments added to keystone-manage trust_flush
+                  command
+                type: string
+              trustFlushSchedule:
+                default: 1 * * * *
+                description: TrustFlushSchedule - Schedule to purge expired or soft-deleted
+                  trusts from database
+                type: string
             required:
             - databaseInstance
             - secret

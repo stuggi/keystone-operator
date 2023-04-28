@@ -80,3 +80,5 @@ require (
 )
 
 replace github.com/openstack-k8s-operators/keystone-operator/api => ./api
+
+replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20230428133538-aac43bc30518

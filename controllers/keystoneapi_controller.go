@@ -456,7 +456,8 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	//
 	var keystonePorts = map[endpoint.Endpoint]endpoint.Data{
 		endpoint.EndpointPublic: {
-			Port: keystone.KeystonePublicPort,
+			Port:          keystone.KeystonePublicPort,
+			RouteOverride: instance.Spec.Override.Route,
 		},
 		endpoint.EndpointInternal: {
 			Port: keystone.KeystoneInternalPort,

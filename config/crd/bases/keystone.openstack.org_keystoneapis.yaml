@@ -216,13 +216,12 @@ spec:
                               Use the weight field in RouteTargetReference object
                               to specify relative preference.
                             items:
-                              description: RouteTargetReference specifies the target
-                                that resolve into endpoints. Only the 'Service' kind
-                                is allowed. Use 'weight' field to emphasize one over
+                              description: TargetReference specifies the target that
+                                resolve into endpoints. Only the 'Service' kind is
+                                allowed. Use 'weight' field to emphasize one over
                                 others.
                               properties:
                                 kind:
-                                  default: Service
                                   description: The kind of target that the route is
                                     referring to. Currently, only 'Service' is allowed
                                   enum:
@@ -232,10 +231,8 @@ spec:
                                 name:
                                   description: name of the service/target that is
                                     being referred to. e.g. name of the service
-                                  minLength: 1
                                   type: string
                                 weight:
-                                  default: 100
                                   description: weight as an integer between 0 and
                                     256, default 100, that specifies the target's
                                     relative weight against other target reference
@@ -244,9 +241,6 @@ spec:
                                   maximum: 256
                                   minimum: 0
                                   type: integer
-                              required:
-                              - kind
-                              - name
                               type: object
                             maxItems: 3
                             type: array
@@ -276,10 +270,8 @@ spec:
                                 description: The target port on pods selected by the
                                   service this route points to. If this is a string,
                                   it will be looked up as a named port in the target
-                                  endpoints port list. Required
+                                  endpoints port list.
                                 x-kubernetes-int-or-string: true
-                            required:
-                            - targetPort
                             type: object
                           subdomain:
                             description: "subdomain is a DNS subdomain that is requested
@@ -352,8 +344,6 @@ spec:
                                 - reencrypt
                                 - passthrough
                                 type: string
-                            required:
-                            - termination
                             type: object
                           to:
                             description: to is an object the route should use as the
@@ -363,7 +353,6 @@ spec:
                               be sent to this backend.
                             properties:
                               kind:
-                                default: Service
                                 description: The kind of target that the route is
                                   referring to. Currently, only 'Service' is allowed
                                 enum:
@@ -373,10 +362,8 @@ spec:
                               name:
                                 description: name of the service/target that is being
                                   referred to. e.g. name of the service
-                                minLength: 1
                                 type: string
                               weight:
-                                default: 100
                                 description: weight as an integer between 0 and 256,
                                   default 100, that specifies the target's relative
                                   weight against other target reference objects. 0
@@ -385,9 +372,6 @@ spec:
                                 maximum: 256
                                 minimum: 0
                                 type: integer
-                            required:
-                            - kind
-                            - name
                             type: object
                           wildcardPolicy:
                             default: None

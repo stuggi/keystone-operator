@@ -91,4 +91,4 @@ replace github.com/openstack-k8s-operators/keystone-operator/api => ./api
 // must consistent with lib-common
 replace github.com/openshift/api => github.com/openshift/api v0.0.0-20230414143018-3367bc7e6ac7
 
-replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20230713091324-928f97bf0353
+replace github.com/openstack-k8s-operators/lib-common/modules/common => github.com/stuggi/lib-common/modules/common v0.0.0-20230713122315-13a7e215fcd3

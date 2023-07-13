@@ -270,8 +270,10 @@ spec:
                                 description: The target port on pods selected by the
                                   service this route points to. If this is a string,
                                   it will be looked up as a named port in the target
-                                  endpoints port list.
+                                  endpoints port list. Required
                                 x-kubernetes-int-or-string: true
+                            required:
+                            - targetPort
                             type: object
                           subdomain:
                             description: "subdomain is a DNS subdomain that is requested
@@ -344,6 +346,8 @@ spec:
                                 - reencrypt
                                 - passthrough
                                 type: string
+                            required:
+                            - termination
                             type: object
                           to:
                             description: to is an object the route should use as the
@@ -374,7 +378,6 @@ spec:
                                 type: integer
                             type: object
                           wildcardPolicy:
-                            default: None
                             description: Wildcard policy if any for the route. Currently
                               only 'Subdomain' or 'None' is allowed.
                             enum:

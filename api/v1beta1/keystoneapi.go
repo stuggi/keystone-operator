@@ -104,6 +104,10 @@ func GetAdminServiceClient(
 			TenantName: keystoneAPI.Spec.AdminProject,
 			DomainName: "Default",
 			Region:     keystoneAPI.Spec.Region,
+			TLS: &openstack.TLSConfig{
+				//TODO : implement ca cert list
+				Insecure: true,
+			},
 		})
 	if err != nil {
 		return nil, ctrl.Result{}, err

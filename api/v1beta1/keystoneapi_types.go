@@ -157,12 +157,33 @@ type KeystoneAPISpec struct {
 	// +kubebuilder:validation:Optional
 	// Override, provides the ability to override the generated manifest of several child resources.
 	Override KeystoneAPIOverrideSpec `json:"override,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// TLS-related configuration for the service.
+	TLS *TLSSpec `json:"tls,omitempty"`
 }
 
 // KeystoneAPIOverrideSpec to override the generated manifest of several child resources.
 type KeystoneAPIOverrideSpec struct {
 	// +kubebuilder:validation:Optional
 	Route *route.OverrideSpec `json:"route,omitempty"`
+}
+
+// TLSSpec - Allows for the configuration of TLS certificates to be used by the service. Also allows for non-TLS traffic to be disabled.
+type TLSSpec struct {
+	// +kubebuilder:validation:Optional
+	// Name of a Secret in the same Namespace as the service object, containing the server's private key & public certificate for TLS.
+	// The Secret must store these as tls.key and tls.crt, respectively.
+	SecretName string `json:"secretName,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Name of a Secret in the same Namespace as the service object, containing the Certificate Authority's public certificate for TLS.
+	// The Secret must store this as ca.crt.
+	CaSecretName string `json:"caSecretName,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// When set to true, the service disables non-TLS listeners. Only TLS-enabled clients will be able to connect.
+	DisableNonTLSListeners bool `json:"disableNonTLSListeners,omitempty"`
 }
 
 // MetalLBConfig to configure the MetalLB loadbalancer service

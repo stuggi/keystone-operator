@@ -38,6 +38,7 @@ func Deployment(
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
+	caList []string,
 ) *appsv1.Deployment {
 	runAsUser := int64(0)
 
@@ -106,7 +107,7 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.RbacResourceName(),
-					Volumes:            getVolumes(instance.Name),
+					Volumes:            getVolumes(instance.Name, caList),
 					Containers: []corev1.Container{
 						{
 							Name: ServiceName + "-api",
@@ -119,7 +120,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   getVolumeMounts(),
+							VolumeMounts:   getVolumeMounts(caList),
 							Resources:      instance.Spec.Resources,
 							ReadinessProbe: readinessProbe,
 							LivenessProbe:  livenessProbe,
@@ -151,7 +152,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         getInitVolumeMounts(caList),
 	}
 	deployment.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

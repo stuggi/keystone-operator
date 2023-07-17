@@ -95,6 +95,11 @@ func GetAdminServiceClient(
 		return nil, ctrlResult, nil
 	}
 
+	tlsConfig := &openstack.TLSConfig{}
+	if keystoneAPI.Spec.Override.Route.Spec.TLS != nil {
+		tlsConfig.CACerts = append(tlsConfig.CACerts, keystoneAPI.Spec.Override.Route.Spec.TLS.CACertificate)
+	}
+
 	os, err := openstack.NewOpenStack(
 		h.GetLogger(),
 		openstack.AuthOpts{
@@ -104,10 +109,7 @@ func GetAdminServiceClient(
 			TenantName: keystoneAPI.Spec.AdminProject,
 			DomainName: "Default",
 			Region:     keystoneAPI.Spec.Region,
-			TLS: &openstack.TLSConfig{
-				//TODO : implement ca cert list
-				Insecure: true,
-			},
+			TLS:        tlsConfig,
 		})
 	if err != nil {
 		return nil, ctrl.Result{}, err

@@ -326,6 +326,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	helper *helper.Helper,
 	serviceLabels map[string]string,
 	serviceAnnotations map[string]string,
+	caList []string,
 ) (ctrl.Result, error) {
 	l := GetLog(ctx)
 	l.Info("Reconciling Service init")
@@ -415,7 +416,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	// run keystone db sync
 	//
 	dbSyncHash := instance.Status.Hash[keystonev1.DbSyncHash]
-	jobDef := keystone.DbSyncJob(instance, serviceLabels, serviceAnnotations)
+	jobDef := keystone.DbSyncJob(instance, serviceLabels, serviceAnnotations, caList)
 	dbSyncjob := job.NewJob(
 		jobDef,
 		keystonev1.DbSyncHash,
@@ -514,7 +515,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	//
 	// BootStrap Job
 	//
-	jobDef = keystone.BootstrapJob(instance, serviceLabels, serviceAnnotations, instance.Status.APIEndpoints)
+	jobDef = keystone.BootstrapJob(instance, serviceLabels, serviceAnnotations, instance.Status.APIEndpoints, caList)
 	bootstrapjob := job.NewJob(
 		jobDef,
 		keystonev1.BootstrapHash,
@@ -697,6 +698,14 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 		return ctrl.Result{}, err
 	}
 
+	// create list of secrets provide ca.crt files and should be added
+	// to deployment pods.
+	// TODO add hash to configMapVars to restart on cert change
+	caList := []string{}
+	if instance.Spec.TLS != nil && instance.Spec.TLS.CaSecretName != "" {
+		caList = append(caList, instance.Spec.TLS.CaSecretName)
+	}
+
 	//
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
@@ -752,7 +761,7 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	}
 
 	// Handle service init
-	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
+	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations, caList)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -780,7 +789,7 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	//
 
 	// Define a new Deployment object
-	deplDef := keystone.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
+	deplDef := keystone.Deployment(instance, inputHash, serviceLabels, serviceAnnotations, caList)
 	depl := deployment.NewDeployment(
 		deplDef,
 		time.Duration(5)*time.Second,
@@ -832,7 +841,7 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	// create Deployment - end
 
 	// create CronJob
-	cronjobDef := keystone.CronJob(instance, serviceLabels, serviceAnnotations)
+	cronjobDef := keystone.CronJob(instance, serviceLabels, serviceAnnotations, caList)
 	cronjob := cronjob.NewCronJob(
 		cronjobDef,
 		time.Duration(5)*time.Second,

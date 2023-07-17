@@ -35,6 +35,7 @@ func DbSyncJob(
 	instance *keystonev1.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
+	caList []string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
 
@@ -76,7 +77,7 @@ func DbSyncJob(
 								RunAsUser: &runAsUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: getVolumeMounts(),
+							VolumeMounts: getVolumeMounts(caList),
 						},
 					},
 				},
@@ -84,7 +85,7 @@ func DbSyncJob(
 		},
 	}
 
-	job.Spec.Template.Spec.Volumes = getVolumes(ServiceName)
+	job.Spec.Template.Spec.Volumes = getVolumes(ServiceName, caList)
 	initContainerDetails := APIDetails{
 		ContainerImage:       instance.Spec.ContainerImage,
 		DatabaseHost:         instance.Status.DatabaseHostname,
@@ -93,7 +94,7 @@ func DbSyncJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         getInitVolumeMounts(caList),
 	}
 	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

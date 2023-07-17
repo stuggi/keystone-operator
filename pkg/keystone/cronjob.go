@@ -35,6 +35,7 @@ func CronJob(
 	instance *keystonev1beta1.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
+	caList []string,
 ) *batchv1.CronJob {
 	runAsUser := int64(0)
 
@@ -80,13 +81,13 @@ func CronJob(
 									},
 									Args:         args,
 									Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-									VolumeMounts: getVolumeMounts(),
+									VolumeMounts: getVolumeMounts(caList),
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser: &runAsUser,
 									},
 								},
 							},
-							Volumes:            getVolumes(instance.Name),
+							Volumes:            getVolumes(instance.Name, caList),
 							RestartPolicy:      corev1.RestartPolicyNever,
 							ServiceAccountName: instance.RbacResourceName(),
 						},
@@ -107,7 +108,7 @@ func CronJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         getInitVolumeMounts(caList),
 	}
 	cronjob.Spec.JobTemplate.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

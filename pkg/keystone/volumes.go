@@ -20,11 +20,14 @@ import (
 )
 
 // getVolumes - service volumes
-func getVolumes(name string) []corev1.Volume {
+func getVolumes(
+	name string,
+	caList []string,
+) []corev1.Volume {
 	var scriptsVolumeDefaultMode int32 = 0755
 	var config0640AccessMode int32 = 0640
 
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: "scripts",
 			VolumeSource: corev1.VolumeSource{
@@ -91,11 +94,31 @@ func getVolumes(name string) []corev1.Volume {
 		},
 	}
 
+	for _, secret := range caList {
+		volumes = append(volumes, corev1.Volume{
+			Name: secret + "-ca",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: secret,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "ca.crt",
+							Path: secret + "-ca.crt",
+						},
+					},
+				},
+			},
+		})
+	}
+
+	return volumes
 }
 
 // getInitVolumeMounts - general init task VolumeMounts
-func getInitVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func getInitVolumeMounts(
+	caList []string,
+) []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "scripts",
 			MountPath: "/usr/local/bin/container-scripts",
@@ -112,11 +135,24 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  false,
 		},
 	}
+
+	for _, secret := range caList {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/ca-trust/source/anchors/" + secret + "-ca.crt",
+			SubPath:   secret + "-ca.crt",
+			ReadOnly:  true,
+			Name:      secret + "-ca",
+		})
+	}
+
+	return volumeMounts
 }
 
 // getVolumeMounts - general VolumeMounts
-func getVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func getVolumeMounts(
+	caList []string,
+) []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "scripts",
 			MountPath: "/usr/local/bin/container-scripts",
@@ -138,4 +174,15 @@ func getVolumeMounts() []corev1.VolumeMount {
 			Name:      "credential-keys",
 		},
 	}
+
+	for _, secret := range caList {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/ca-trust/source/anchors/" + secret + "-ca.crt",
+			SubPath:   secret + "-ca.crt",
+			ReadOnly:  true,
+			Name:      secret + "-ca",
+		})
+	}
+
+	return volumeMounts
 }

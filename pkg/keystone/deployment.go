@@ -75,14 +75,31 @@ func Deployment(
 		//
 		// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 		//
+		/*
+			livenessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/bin/true",
+				},
+			}
+
+			readinessProbe.Exec = &corev1.ExecAction{
+				Command: []string{
+					"/bin/true",
+				},
+			}
+		*/
+
 		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/v3",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			Path:   "/v3",
+			Port:   intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			Scheme: corev1.URISchemeHTTPS,
 		}
 		readinessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/v3",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			Path:   "/v3",
+			Port:   intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			Scheme: corev1.URISchemeHTTPS,
 		}
+
 	}
 
 	envVars := map[string]env.Setter{}
@@ -107,7 +124,7 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.RbacResourceName(),
-					Volumes:            getVolumes(instance.Name, caList),
+					Volumes:            getVolumes(instance.Name, caList, instance.Spec.TLS.CaSecretName),
 					Containers: []corev1.Container{
 						{
 							Name: ServiceName + "-api",
@@ -120,7 +137,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   getVolumeMounts(caList),
+							VolumeMounts:   getVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 							Resources:      instance.Spec.Resources,
 							ReadinessProbe: readinessProbe,
 							LivenessProbe:  livenessProbe,
@@ -152,7 +169,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(caList),
+		VolumeMounts:         getInitVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 	}
 	deployment.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

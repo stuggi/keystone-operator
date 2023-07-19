@@ -462,7 +462,8 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			RouteOverride: instance.Spec.Override.Route,
 		},
 		endpoint.EndpointInternal: {
-			Port: keystone.KeystoneInternalPort,
+			Port:     keystone.KeystoneInternalPort,
+			Protocol: endpoint.PtrProtocol(endpoint.ProtocolHTTPS),
 		},
 	}
 

@@ -104,7 +104,7 @@ func BootstrapJob(
 									},
 								},
 							},
-							VolumeMounts: getVolumeMounts(caList),
+							VolumeMounts: getVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 						},
 					},
 				},
@@ -112,7 +112,7 @@ func BootstrapJob(
 		},
 	}
 	job.Spec.Template.Spec.Containers[0].Env = env.MergeEnvs(job.Spec.Template.Spec.Containers[0].Env, envVars)
-	job.Spec.Template.Spec.Volumes = getVolumes(instance.Name, caList)
+	job.Spec.Template.Spec.Volumes = getVolumes(instance.Name, caList, instance.Spec.TLS.CaSecretName)
 
 	initContainerDetails := APIDetails{
 		ContainerImage:       instance.Spec.ContainerImage,
@@ -122,7 +122,7 @@ func BootstrapJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(caList),
+		VolumeMounts:         getInitVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 	}
 	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

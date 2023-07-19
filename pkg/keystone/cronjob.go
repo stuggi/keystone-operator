@@ -81,13 +81,13 @@ func CronJob(
 									},
 									Args:         args,
 									Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-									VolumeMounts: getVolumeMounts(caList),
+									VolumeMounts: getVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser: &runAsUser,
 									},
 								},
 							},
-							Volumes:            getVolumes(instance.Name, caList),
+							Volumes:            getVolumes(instance.Name, caList, instance.Spec.TLS.CaSecretName),
 							RestartPolicy:      corev1.RestartPolicyNever,
 							ServiceAccountName: instance.RbacResourceName(),
 						},
@@ -108,7 +108,7 @@ func CronJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(caList),
+		VolumeMounts:         getInitVolumeMounts(caList, instance.Spec.TLS.CaSecretName),
 	}
 	cronjob.Spec.JobTemplate.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

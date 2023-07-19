@@ -17,12 +17,14 @@ package keystone
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/pointer"
 )
 
 // getVolumes - service volumes
 func getVolumes(
 	name string,
 	caList []string,
+	crtSecret string,
 ) []corev1.Volume {
 	var scriptsVolumeDefaultMode int32 = 0755
 	var config0640AccessMode int32 = 0640
@@ -111,12 +113,45 @@ func getVolumes(
 		})
 	}
 
+	if crtSecret != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: crtSecret + "-crt",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: crtSecret,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "tls.crt",
+							Path: "service.crt",
+						},
+					},
+				},
+			},
+		})
+		volumes = append(volumes, corev1.Volume{
+			Name: crtSecret + "-key",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: crtSecret,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "tls.key",
+							Path: "service.key",
+							Mode: pointer.Int32(0400),
+						},
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
 // getInitVolumeMounts - general init task VolumeMounts
 func getInitVolumeMounts(
 	caList []string,
+	crtSecret string,
 ) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -145,12 +180,28 @@ func getInitVolumeMounts(
 		})
 	}
 
+	if crtSecret != "" {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/tls/certs/service.crt",
+			SubPath:   "service.crt",
+			ReadOnly:  true,
+			Name:      crtSecret + "-crt",
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/tls/private/service.key",
+			SubPath:   "service.key",
+			ReadOnly:  true,
+			Name:      crtSecret + "-key",
+		})
+	}
+
 	return volumeMounts
 }
 
 // getVolumeMounts - general VolumeMounts
 func getVolumeMounts(
 	caList []string,
+	crtSecret string,
 ) []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -181,6 +232,21 @@ func getVolumeMounts(
 			SubPath:   secret + "-ca.crt",
 			ReadOnly:  true,
 			Name:      secret + "-ca",
+		})
+	}
+
+	if crtSecret != "" {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/tls/certs/service.crt",
+			SubPath:   "service.crt",
+			ReadOnly:  true,
+			Name:      crtSecret + "-crt",
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			MountPath: "/etc/pki/tls/private/service.key",
+			SubPath:   "service.key",
+			ReadOnly:  true,
+			Name:      crtSecret + "-key",
 		})
 	}
 

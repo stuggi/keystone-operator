@@ -158,7 +158,8 @@ type KeystoneAPISpec struct {
 // APIOverrideSpec to override the generated manifest of several child resources.
 type APIOverrideSpec struct {
 	// Override configuration for the Service created to serve traffic to the cluster.
-	Service []service.OverrideSpec `json:"service,omitempty"`
+	// The key must be the endpoint type (public, internal)
+	Service map[string]service.OverrideSpec `json:"service,omitempty"`
 }
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret

@@ -464,13 +464,15 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	apiEndpoints := make(map[string]string)
 
 	for endpointType, data := range keystoneEndpoints {
-		endpointName := keystone.ServiceName + "-" + string(endpointType)
-		svcOverride := service.GetOverrideSpecForEndpoint(instance.Spec.Override.Service, endpointType)
+		endpointTypeStr := string(endpointType)
+		endpointName := keystone.ServiceName + "-" + endpointTypeStr
+
+		svcOverride := instance.Spec.Override.Service[endpointTypeStr]
 
 		exportLabels := util.MergeStringMaps(
 			serviceLabels,
 			map[string]string{
-				string(endpointType): "true",
+				endpointTypeStr: "true",
 			},
 		)
 
@@ -488,7 +490,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 				},
 			}),
 			5,
-			svcOverride,
+			&svcOverride,
 		)
 		if err != nil {
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -523,7 +525,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 
 		// TODO: TLS, pass in https as protocol, create TLS cert
 		apiEndpoints[string(endpointType)], err = svc.GetAPIEndpoint(
-			svcOverride, data.Protocol, data.Path)
+			&svcOverride, data.Protocol, data.Path)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

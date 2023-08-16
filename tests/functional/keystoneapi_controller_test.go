@@ -466,27 +466,24 @@ var _ = Describe("Keystone controller", func() {
 	When("A KeystoneAPI is created with service override", func() {
 		BeforeEach(func() {
 			spec := GetDefaultKeystoneAPISpec()
-			var serviceOverride []interface{}
-			serviceOverride = append(
-				serviceOverride, map[string]interface{}{
-					"endpoint": "internal",
-					"metadata": map[string]map[string]string{
-						"annotations": {
-							"dnsmasq.network.openstack.org/hostname": "keystone-internal.openstack.svc",
-							"metallb.universe.tf/address-pool":       "osp-internalapi",
-							"metallb.universe.tf/allow-shared-ip":    "osp-internalapi",
-							"metallb.universe.tf/loadBalancerIPs":    "internal-lb-ip-1,internal-lb-ip-2",
-						},
-						"labels": {
-							"internal": "true",
-							"service":  "keystone",
-						},
+			serviceOverride := map[string]interface{}{}
+			serviceOverride["internal"] = map[string]interface{}{
+				"metadata": map[string]map[string]string{
+					"annotations": {
+						"dnsmasq.network.openstack.org/hostname": "keystone-internal.openstack.svc",
+						"metallb.universe.tf/address-pool":       "osp-internalapi",
+						"metallb.universe.tf/allow-shared-ip":    "osp-internalapi",
+						"metallb.universe.tf/loadBalancerIPs":    "internal-lb-ip-1,internal-lb-ip-2",
 					},
-					"spec": map[string]interface{}{
-						"type": "LoadBalancer",
+					"labels": {
+						"internal": "true",
+						"service":  "keystone",
 					},
 				},
-			)
+				"spec": map[string]interface{}{
+					"type": "LoadBalancer",
+				},
+			}
 
 			spec["override"] = map[string]interface{}{
 				"service": serviceOverride,
@@ -549,13 +546,10 @@ var _ = Describe("Keystone controller", func() {
 	When("A KeystoneAPI is created with service override endpointURL set", func() {
 		BeforeEach(func() {
 			spec := GetDefaultKeystoneAPISpec()
-			var serviceOverride []interface{}
-			serviceOverride = append(
-				serviceOverride, map[string]interface{}{
-					"endpoint":    "public",
-					"endpointURL": "http://keystone-openstack.apps-crc.testing",
-				},
-			)
+			serviceOverride := map[string]interface{}{}
+			serviceOverride["public"] = map[string]interface{}{
+				"endpointURL": "http://keystone-openstack.apps-crc.testing",
+			}
 
 			spec["override"] = map[string]interface{}{
 				"service": serviceOverride,

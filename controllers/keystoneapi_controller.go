@@ -467,7 +467,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 		endpointTypeStr := string(endpointType)
 		endpointName := keystone.ServiceName + "-" + endpointTypeStr
 
-		svcOverride := instance.Spec.Override.Service[endpointType]
+		svcOverride := instance.Spec.Override.Service[keystonev1.Endpoint(endpointType)]
 		if svcOverride.EmbeddedLabelsAnnotations == nil {
 			svcOverride.EmbeddedLabelsAnnotations = &service.EmbeddedLabelsAnnotations{}
 		}

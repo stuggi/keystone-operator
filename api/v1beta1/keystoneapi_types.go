@@ -159,14 +159,12 @@ type KeystoneAPISpec struct {
 type APIOverrideSpec struct {
 	// Override configuration for the Service created to serve traffic to the cluster.
 	// The key must be the endpoint type (public, internal)
-	Service map[service.Endpoint]service.RoutedOverrideSpec `json:"service,omitempty"`
+	Service map[Endpoint]service.RoutedOverrideSpec `json:"service,omitempty"`
 }
 
-/*
 // +kubebuilder:validation:Enum=public;internal
 // Endpoint - which can be either public or internal
 type Endpoint string
-*/
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret
 type PasswordSelector struct {

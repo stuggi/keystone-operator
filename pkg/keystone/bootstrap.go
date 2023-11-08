@@ -20,6 +20,7 @@ import (
 
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,6 +65,18 @@ func BootstrapJob(
 		envVars["OS_BOOTSTRAP_PUBLIC_URL"] = env.SetValue(endpoints["public"])
 	}
 
+	// create Volume and VolumeMounts
+	volumes := getVolumes(instance.Name)
+	volumeMounts := getVolumeMounts()
+	initVolumeMounts := getInitVolumeMounts()
+
+	// add CA cert if defined
+	if instance.Spec.TLS.API.Enabled() {
+		volumes = append(volumes, instance.Spec.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
+		initVolumeMounts = append(initVolumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName + "-bootstrap",
@@ -102,15 +115,15 @@ func BootstrapJob(
 									},
 								},
 							},
-							VolumeMounts: getVolumeMounts(),
+							VolumeMounts: volumeMounts,
 						},
 					},
+					Volumes: volumes,
 				},
 			},
 		},
 	}
 	job.Spec.Template.Spec.Containers[0].Env = env.MergeEnvs(job.Spec.Template.Spec.Containers[0].Env, envVars)
-	job.Spec.Template.Spec.Volumes = getVolumes(instance.Name)
 
 	initContainerDetails := APIDetails{
 		ContainerImage:       instance.Spec.ContainerImage,
@@ -120,7 +133,7 @@ func BootstrapJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

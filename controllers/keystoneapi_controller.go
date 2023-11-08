@@ -21,9 +21,11 @@ import (
 	"strings"
 	"time"
 
+	certmgrv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	keystone "github.com/openstack-k8s-operators/keystone-operator/pkg/keystone"
+	"github.com/openstack-k8s-operators/lib-common/modules/certmanager"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	configmap "github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
@@ -38,6 +40,7 @@ import (
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
 	oko_secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
@@ -48,6 +51,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -103,6 +107,8 @@ type KeystoneAPIReconciler struct {
 // +kubebuilder:rbac:groups=memcached.openstack.org,resources=memcacheds,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=memcached.openstack.org,resources=memcacheds/finalizers,verbs=update
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=issuers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete;
 
 // service account, role, rolebinding
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
@@ -257,6 +263,7 @@ func (r *KeystoneAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Owns(&certmgrv1.Certificate{}).
 		Watches(&source.Kind{Type: &memcachedv1.Memcached{}},
 			handler.EnqueueRequestsFromMapFunc(memcachedFn)).
 		Complete(r)
@@ -323,9 +330,13 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	helper *helper.Helper,
 	serviceLabels map[string]string,
 	serviceAnnotations map[string]string,
-) (ctrl.Result, error) {
+	//) (map[string]env.Setter, ctrl.Result, error) {
+) (map[service.Endpoint]tls.Service, ctrl.Result, error) {
+
 	l := GetLog(ctx)
 	l.Info("Reconciling Service init")
+	tlsEndptCfgMap := make(map[service.Endpoint]tls.Service)
+
 	//
 	// Service account, role, binding
 	//
@@ -344,9 +355,9 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	}
 	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
 	if err != nil {
-		return rbacResult, err
+		return tlsEndptCfgMap, rbacResult, err
 	} else if (rbacResult != ctrl.Result{}) {
-		return rbacResult, nil
+		return tlsEndptCfgMap, rbacResult, nil
 	}
 
 	//
@@ -372,7 +383,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.SeverityWarning,
 			condition.DBReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, err
+		return tlsEndptCfgMap, ctrl.Result{}, err
 	}
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -380,7 +391,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.RequestedReason,
 			condition.SeverityInfo,
 			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
+		return tlsEndptCfgMap, ctrlResult, nil
 	}
 
 	// wait for the DB to be setup
@@ -392,7 +403,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.SeverityWarning,
 			condition.DBReadyErrorMessage,
 			err.Error()))
-		return ctrlResult, err
+		return tlsEndptCfgMap, ctrlResult, err
 	}
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -400,7 +411,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.RequestedReason,
 			condition.SeverityInfo,
 			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
+		return tlsEndptCfgMap, ctrlResult, nil
 	}
 	// update Status.DatabaseHostname, used to bootstrap/config the service
 	instance.Status.DatabaseHostname = db.GetDatabaseHostname()
@@ -430,7 +441,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.RequestedReason,
 			condition.SeverityInfo,
 			condition.DBSyncReadyRunningMessage))
-		return ctrlResult, nil
+		return tlsEndptCfgMap, ctrlResult, nil
 	}
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -439,7 +450,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.SeverityWarning,
 			condition.DBSyncReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, err
+		return tlsEndptCfgMap, ctrl.Result{}, err
 	}
 	if dbSyncjob.HasChanged() {
 		instance.Status.Hash[keystonev1.DbSyncHash] = dbSyncjob.GetHash()
@@ -460,11 +471,11 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			Port: keystone.KeystoneInternalPort,
 		},
 	}
-	apiEndpoints := make(map[string]string)
 
+	apiEndpoints := make(map[string]string)
 	for endpointType, data := range keystoneEndpoints {
 		endpointTypeStr := string(endpointType)
-		endpointName := keystone.ServiceName + "-" + endpointTypeStr
+		endpointName := instance.Name + "-" + endpointTypeStr
 
 		svcOverride := instance.Spec.Override.Service[endpointType]
 		if svcOverride.EmbeddedLabelsAnnotations == nil {
@@ -502,7 +513,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 				condition.ExposeServiceReadyErrorMessage,
 				err.Error()))
 
-			return ctrl.Result{}, err
+			return tlsEndptCfgMap, ctrl.Result{}, err
 		}
 
 		svc.AddAnnotation(map[string]string{
@@ -534,22 +545,62 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 				condition.ExposeServiceReadyErrorMessage,
 				err.Error()))
 
-			return ctrlResult, err
+			return tlsEndptCfgMap, ctrlResult, err
 		} else if (ctrlResult != ctrl.Result{}) {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.ExposeServiceReadyCondition,
 				condition.RequestedReason,
 				condition.SeverityInfo,
 				condition.ExposeServiceReadyRunningMessage))
-			return ctrlResult, nil
+			return tlsEndptCfgMap, ctrlResult, nil
 		}
 		// create service - end
 
-		// TODO: TLS, pass in https as protocol, create TLS cert
+		// create TLS certificates if enabled
+		if endpointTLSCfg, ok := instance.Spec.TLS.API.Endpoint[endpointType]; ok && instance.Spec.TLS.API.Enabled() {
+			// generate certificate
+			if endpointTLSCfg.SecretName == nil && endpointTLSCfg.IssuerName != nil {
+				// request certificate
+				certRequest := certmanager.CertificateRequest{
+					IssuerName:  *endpointTLSCfg.IssuerName,
+					CertName:    fmt.Sprintf("%s-svc", endpointName),
+					Duration:    nil,
+					Hostnames:   []string{svc.GetServiceHostname()},
+					Ips:         nil,
+					Annotations: map[string]string{},
+					Labels:      exportLabels,
+					Usages:      nil,
+				}
+				certSecret, ctrlResult, err := certmanager.EnsureCert(
+					ctx,
+					helper,
+					certRequest)
+				if err != nil {
+					return tlsEndptCfgMap, ctrlResult, err
+				} else if (ctrlResult != ctrl.Result{}) {
+					return tlsEndptCfgMap, ctrlResult, nil
+				}
+
+				endpointTLSCfg.SecretName = ptr.To(certSecret.Name)
+			}
+
+			// convert to tls.Service. Here we could also set different
+			// mount points for the certificates if required
+			tlsService, err := endpointTLSCfg.ToService()
+			if err != nil {
+				return tlsEndptCfgMap, ctrlResult, err
+			}
+
+			tlsEndptCfgMap[endpointType] = *tlsService
+
+			// set endpoint protocol to https
+			data.Protocol = ptr.To(service.ProtocolHTTPS)
+		}
+
 		apiEndpoints[string(endpointType)], err = svc.GetAPIEndpoint(
 			svcOverride.EndpointURL, data.Protocol, data.Path)
 		if err != nil {
-			return ctrl.Result{}, err
+			return tlsEndptCfgMap, ctrl.Result{}, err
 		}
 	}
 
@@ -583,7 +634,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.RequestedReason,
 			condition.SeverityInfo,
 			condition.BootstrapReadyRunningMessage))
-		return ctrlResult, nil
+		return tlsEndptCfgMap, ctrlResult, nil
 	}
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -592,7 +643,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 			condition.SeverityWarning,
 			condition.BootstrapReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, err
+		return tlsEndptCfgMap, ctrl.Result{}, err
 	}
 	if bootstrapjob.HasChanged() {
 		instance.Status.Hash[keystonev1.BootstrapHash] = bootstrapjob.GetHash()
@@ -603,7 +654,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	// run keystone bootstrap - end
 
 	l.Info("Reconciled Service init successfully")
-	return ctrl.Result{}, nil
+	return tlsEndptCfgMap, ctrl.Result{}, nil
 }
 
 func (r *KeystoneAPIReconciler) reconcileUpdate(ctx context.Context, instance *keystonev1.KeystoneAPI, helper *helper.Helper) (ctrl.Result, error) {
@@ -628,7 +679,11 @@ func (r *KeystoneAPIReconciler) reconcileUpgrade(ctx context.Context, instance *
 	return ctrl.Result{}, nil
 }
 
-func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *keystonev1.KeystoneAPI, helper *helper.Helper) (ctrl.Result, error) {
+func (r *KeystoneAPIReconciler) reconcileNormal(
+	ctx context.Context,
+	instance *keystonev1.KeystoneAPI,
+	helper *helper.Helper,
+) (ctrl.Result, error) {
 	l := GetLog(ctx)
 	l.Info("Reconciling Service")
 
@@ -716,6 +771,9 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	// Create ConfigMaps and Secrets required as input for the Service and calculate an overall hash of hashes
 	//
 
+	// TODO: should create cert secret before creating the ServiceConfigMaps, otherwise we'll have another job runs
+	// since config changes
+
 	//
 	// create Configmap required for keystone input
 	// - %-scripts configmap holding scripts to e.g. bootstrap the service
@@ -749,16 +807,29 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	}
 
 	//
-	// create hash over all the different input resources to identify if any those changed
-	// and a restart/recreate is required.
+	// TLS input validation
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
-	if err != nil {
-		return ctrl.Result{}, err
-	} else if hashChanged {
-		// Hash changed and instance status should be updated (which will be done by main defer func),
-		// so we need to return and reconcile again
-		return ctrl.Result{}, nil
+	if instance.Spec.TLS.API.Enabled() {
+		// Validate the CA cert secret if provided
+		if instance.Spec.TLS.CaBundleSecretName != "" {
+			hash, ctrlResult, err := tls.ValidateCACertSecret(
+				ctx,
+				helper.GetClient(),
+				types.NamespacedName{
+					Name:      instance.Spec.TLS.CaBundleSecretName,
+					Namespace: instance.Namespace,
+				},
+			)
+			if err != nil {
+				return ctrlResult, err
+			} else if (ctrlResult != ctrl.Result{}) {
+				return ctrlResult, nil
+			}
+
+			if hash != "" {
+				configMapVars[tls.CABundleKey] = env.SetValue(hash)
+			}
+		}
 	}
 
 	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
@@ -770,7 +841,8 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	//
 
 	serviceLabels := map[string]string{
-		common.AppSelector: keystone.ServiceName,
+		common.AppSelector:   keystone.ServiceName,
+		common.OwnerSelector: instance.Name,
 	}
 
 	// networks to attach to
@@ -803,11 +875,25 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	}
 
 	// Handle service init
-	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
+	tlsEndpointConfig, ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
+	}
+
+	if len(tlsEndpointConfig) > 0 {
+		certsHash, ctrlResult, err := tls.ValidateEndpointCerts(
+			ctx,
+			helper,
+			instance.Namespace,
+			tlsEndpointConfig)
+		if err != nil {
+			return ctrlResult, err
+		} else if (ctrlResult != ctrl.Result{}) {
+			return ctrlResult, nil
+		}
+		configMapVars[tls.TLSHashName] = env.SetValue(certsHash)
 	}
 
 	// Handle service update
@@ -830,8 +916,20 @@ func (r *KeystoneAPIReconciler) reconcileNormal(ctx context.Context, instance *k
 	// normal reconcile tasks
 	//
 
+	// create hash over all the different input resources to identify if any those changed
+	// and a restart/recreate is required.
+	//inputEnvMap := util.MergeMaps(configMapVars, initEnvVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if hashChanged {
+		// Hash changed and instance status should be updated (which will be done by main defer func),
+		// so we need to return and reconcile again
+		return ctrl.Result{}, nil
+	}
+
 	// Define a new Deployment object
-	deplDef := keystone.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
+	deplDef := keystone.Deployment(ctx, helper, instance, inputHash, serviceLabels, serviceAnnotations, tlsEndpointConfig)
 	depl := deployment.NewDeployment(
 		deplDef,
 		5*time.Second,
@@ -951,6 +1049,22 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	templateParameters := map[string]interface{}{
 		"memcachedServers": strings.Join(mc.Status.ServerList, ","),
 	}
+
+	// create httpd  vhost template parameters
+	httpdVhostConfig := map[string]interface{}{}
+	for _, endpt := range []service.Endpoint{service.EndpointInternal, service.EndpointPublic} {
+		endptConfig := map[string]interface{}{}
+		endptConfig["ServerName"] = fmt.Sprintf("keystone-%s.%s.svc", endpt.String(), instance.Namespace)
+		endptConfig["TLS"] = false // default TLS to false, and set it bellow to true if enabled
+		if instance.Spec.TLS.API.Enabled() {
+			endptConfig["TLS"] = true
+			endptConfig["SSLCertificateFile"] = fmt.Sprintf("/etc/pki/tls/certs/%s.crt", endpt.String())
+			endptConfig["SSLCertificateKeyFile"] = fmt.Sprintf("/etc/pki/tls/private/%s.key", endpt.String())
+		}
+		httpdVhostConfig[endpt.String()] = endptConfig
+	}
+
+	templateParameters["VHosts"] = httpdVhostConfig
 
 	cms := []util.Template{
 		// ScriptsConfigMap

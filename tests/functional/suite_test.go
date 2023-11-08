@@ -24,6 +24,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	certmgrv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	test "github.com/openstack-k8s-operators/lib-common/modules/test"
@@ -32,6 +33,7 @@ import (
 	infra_test "github.com/openstack-k8s-operators/infra-operator/apis/test/helpers"
 	keystone_test "github.com/openstack-k8s-operators/keystone-operator/api/test/helpers"
 	"github.com/openstack-k8s-operators/keystone-operator/controllers"
+	certmanager_test "github.com/openstack-k8s-operators/lib-common/modules/certmanager/test/helpers"
 	common_test "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 	mariadb_test "github.com/openstack-k8s-operators/mariadb-operator/api/test/helpers"
 	//+kubebuilder:scaffold:imports
@@ -51,6 +53,7 @@ var (
 	keystone  *keystone_test.TestHelper
 	mariadb   *mariadb_test.TestHelper
 	infra     *infra_test.TestHelper
+	crtmgr    *certmanager_test.TestHelper
 	namespace string
 )
 
@@ -82,6 +85,8 @@ var _ = BeforeSuite(func() {
 	memcachedCRDs, err := test.GetCRDDirFromModule(
 		"github.com/openstack-k8s-operators/infra-operator/apis", "../../go.mod", "bases")
 	Expect(err).ShouldNot(HaveOccurred())
+	certmgrv1CRDs, err := test.GetOpenShiftCRDDir("cert-manager/v1", "../../go.mod")
+	Expect(err).ShouldNot(HaveOccurred())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -89,6 +94,7 @@ var _ = BeforeSuite(func() {
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			mariaDBCRDs,
 			memcachedCRDs,
+			certmgrv1CRDs,
 		},
 		ErrorIfCRDPathMissing: true,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
@@ -111,6 +117,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	err = memcachedv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	err = certmgrv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
 
@@ -125,6 +133,8 @@ var _ = BeforeSuite(func() {
 	Expect(mariadb).NotTo(BeNil())
 	infra = infra_test.NewTestHelper(ctx, k8sClient, timeout, interval, logger)
 	Expect(infra).NotTo(BeNil())
+	crtmgr = certmanager_test.NewTestHelper(ctx, k8sClient, timeout, interval, logger)
+	Expect(crtmgr).NotTo(BeNil())
 
 	// Start the controller-manager if goroutine
 	webhookInstallOptions := &testEnv.WebhookInstallOptions

@@ -20,6 +20,8 @@ import (
 
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +37,7 @@ func DbSyncJob(
 	instance *keystonev1.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
+	tlsDeploymentResources *tls.DeplomentResources,
 ) *batchv1.Job {
 	runAsUser := int64(0)
 
@@ -48,6 +51,21 @@ func DbSyncJob(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["KOLLA_BOOTSTRAP"] = env.SetValue("true")
+
+	// create Volume and VolumeMounts
+	volumes := []corev1.Volume{}
+	volumeMounts := []corev1.VolumeMount{}
+	initVolumeMounts := []corev1.VolumeMount{}
+
+	if tlsDeploymentResources != nil {
+		volumes = getVolumes(instance.Name, tlsDeploymentResources.GetVolumes(true))
+		volumeMounts = getVolumeMounts(tlsDeploymentResources.GetVolumeMounts(true))
+		initVolumeMounts = getInitVolumeMounts(tlsDeploymentResources.GetVolumeMounts(true))
+	} else {
+		volumes = getVolumes(instance.Name, []corev1.Volume{})
+		volumeMounts = getVolumeMounts([]corev1.VolumeMount{})
+		initVolumeMounts = getInitVolumeMounts([]corev1.VolumeMount{})
+	}
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -75,15 +93,15 @@ func DbSyncJob(
 								RunAsUser: &runAsUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: getVolumeMounts(),
+							VolumeMounts: volumeMounts,
 						},
 					},
+					Volumes: volumes,
 				},
 			},
 		},
 	}
 
-	job.Spec.Template.Spec.Volumes = getVolumes(ServiceName)
 	initContainerDetails := APIDetails{
 		ContainerImage:       instance.Spec.ContainerImage,
 		DatabaseHost:         instance.Status.DatabaseHostname,
@@ -92,7 +110,7 @@ func DbSyncJob(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

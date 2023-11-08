@@ -20,11 +20,14 @@ import (
 )
 
 // getVolumes - service volumes
-func getVolumes(name string) []corev1.Volume {
+func getVolumes(
+	name string,
+	volumes []corev1.Volume,
+) []corev1.Volume {
 	var scriptsVolumeDefaultMode int32 = 0755
 	var config0640AccessMode int32 = 0640
 
-	return []corev1.Volume{
+	return append([]corev1.Volume{
 		{
 			Name: "scripts",
 			VolumeSource: corev1.VolumeSource{
@@ -89,13 +92,16 @@ func getVolumes(name string) []corev1.Volume {
 				},
 			},
 		},
-	}
-
+	},
+		volumes...,
+	)
 }
 
 // getInitVolumeMounts - general init task VolumeMounts
-func getInitVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func getInitVolumeMounts(
+	volumeMounts []corev1.VolumeMount,
+) []corev1.VolumeMount {
+	return append([]corev1.VolumeMount{
 		{
 			Name:      "scripts",
 			MountPath: "/usr/local/bin/container-scripts",
@@ -111,12 +117,16 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 			MountPath: "/var/lib/config-data/merged",
 			ReadOnly:  false,
 		},
-	}
+	},
+		volumeMounts...,
+	)
 }
 
 // getVolumeMounts - general VolumeMounts
-func getVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func getVolumeMounts(
+	volumeMounts []corev1.VolumeMount,
+) []corev1.VolumeMount {
+	return append([]corev1.VolumeMount{
 		{
 			Name:      "scripts",
 			MountPath: "/usr/local/bin/container-scripts",
@@ -143,5 +153,7 @@ func getVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 			Name:      "credential-keys",
 		},
-	}
+	},
+		volumeMounts...,
+	)
 }

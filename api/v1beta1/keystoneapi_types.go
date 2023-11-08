@@ -22,6 +22,7 @@ import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -153,6 +154,28 @@ type KeystoneAPISpec struct {
 	// +kubebuilder:validation:Optional
 	// Override, provides the ability to override the generated manifest of several child resources.
 	Override APIOverrideSpec `json:"override,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	// TLS - Parameters related to the TLS
+	TLS TLSSection `json:"tls,omitempty"`
+}
+
+// TLSSection defines the desired state of TLS configuration
+type TLSSection struct {
+	// +kubebuilder:validation:Optional
+	// Disable TLS for the deployment of the service
+	Disable *bool `json:"disable,omitempty"`
+
+	// +kubebuilder:validation:optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	// The key must be the endpoint type (public, internal)
+	Endpoint map[service.Endpoint]tls.Service `json:"endpoint,omitempty"`
+
+	// +kubebuilder:validation:optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	// Secret containing CA bundle
+	tls.Ca `json:",inline"`
 }
 
 // APIOverrideSpec to override the generated manifest of several child resources.

@@ -20,11 +20,11 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -38,6 +38,7 @@ func Deployment(
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
+	tlsDeploymentResources *tls.DeplomentResources,
 ) *appsv1.Deployment {
 	runAsUser := int64(0)
 
@@ -71,22 +72,51 @@ func Deployment(
 	} else {
 		args = append(args, ServiceCommand)
 
-		//
-		// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-		//
-		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/v3",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
 		}
-		readinessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/v3",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+
+		readinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
 		}
+		// TODO
+		/*
+			//
+			// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+			//
+			livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+				Path: "/v3",
+				Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			}
+			readinessProbe.HTTPGet = &corev1.HTTPGetAction{
+				Path: "/v3",
+				Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(KeystonePublicPort)},
+			}
+		*/
 	}
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
+
+	// create Volume and VolumeMounts
+	volumes := []corev1.Volume{}
+	volumeMounts := []corev1.VolumeMount{}
+	initVolumeMounts := []corev1.VolumeMount{}
+
+	if tlsDeploymentResources != nil {
+		volumes = getVolumes(instance.Name, tlsDeploymentResources.GetVolumes(false))
+		volumeMounts = getVolumeMounts(tlsDeploymentResources.GetVolumeMounts(false))
+		initVolumeMounts = getInitVolumeMounts(tlsDeploymentResources.GetVolumeMounts(false))
+	} else {
+		volumes = getVolumes(instance.Name, []corev1.Volume{})
+		volumeMounts = getVolumeMounts([]corev1.VolumeMount{})
+		initVolumeMounts = getInitVolumeMounts([]corev1.VolumeMount{})
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -105,7 +135,7 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.RbacResourceName(),
-					Volumes:            getVolumes(instance.Name),
+					Volumes:            volumes,
 					Containers: []corev1.Container{
 						{
 							Name: ServiceName + "-api",
@@ -118,7 +148,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   getVolumeMounts(),
+							VolumeMounts:   volumeMounts,
 							Resources:      instance.Spec.Resources,
 							ReadinessProbe: readinessProbe,
 							LivenessProbe:  livenessProbe,
@@ -150,7 +180,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         getInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	deployment.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 

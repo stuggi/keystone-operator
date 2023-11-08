@@ -288,6 +288,8 @@ spec:
                                 services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types'
                               type: string
                           type: object
+                        tls:
+                          type: boolean
                       type: object
                     description: Override configuration for the Service created to
                       serve traffic to the cluster. The key must be the endpoint type
@@ -381,6 +383,28 @@ spec:
                 description: Secret containing OpenStack password information for
                   keystone KeystoneDatabasePassword, AdminPassword
                 type: string
+              tls:
+                description: TLS - Parameters related to the TLS
+                properties:
+                  caSecretName:
+                    type: string
+                  disable:
+                    description: Disable TLS for the deployment of the service
+                    type: boolean
+                  endpoint:
+                    additionalProperties:
+                      description: Service contains server-specific TLS secret
+                      properties:
+                        disableNonTLSListeners:
+                          type: boolean
+                        issuerName:
+                          type: string
+                        secretName:
+                          type: string
+                      type: object
+                    description: The key must be the endpoint type (public, internal)
+                    type: object
+                type: object
               trustFlushArgs:
                 default: ""
                 description: TrustFlushArgs - Arguments added to keystone-manage trust_flush

@@ -381,6 +381,47 @@ spec:
                 description: Secret containing OpenStack password information for
                   keystone KeystoneDatabasePassword, AdminPassword
                 type: string
+              tls:
+                description: TLS - Parameters related to the TLS
+                properties:
+                  api:
+                    description: API tls type which encapsulates for API services
+                    properties:
+                      disabled:
+                        description: Disabled TLS for the deployment of the service
+                        type: boolean
+                      endpoint:
+                        additionalProperties:
+                          description: GenericService contains server-specific TLS
+                            secret or issuer
+                          properties:
+                            secretName:
+                              description: SecretName - holding the cert, key for
+                                the service
+                              type: string
+                          type: object
+                        description: The key must be the endpoint type (public, internal)
+                        type: object
+                    type: object
+                  caBundleSecretName:
+                    description: CaBundleSecretName - holding the CA certs in a pre-created
+                      bundle file
+                    type: string
+                  db:
+                    description: DB tls type reflect TLS settings for DB
+                    properties:
+                      disabled:
+                        description: Disabled TLS for db connection
+                        type: boolean
+                    type: object
+                  messaging:
+                    description: Messaging tls type reflect TLS settings for Messaging
+                    properties:
+                      disabled:
+                        description: Disabled TLS for messaging
+                        type: boolean
+                    type: object
+                type: object
               trustFlushArgs:
                 default: ""
                 description: TrustFlushArgs - Arguments added to keystone-manage trust_flush

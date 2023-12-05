@@ -49,6 +49,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/utils/ptr"
 
 	"github.com/go-logr/logr"
@@ -56,10 +57,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -214,9 +217,53 @@ func (r *KeystoneAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return r.reconcileNormal(ctx, instance, helper)
 }
 
+// fields to index to reconcile when change
+const (
+	passwordSecretField           = ".spec.secret"
+	caBundleSecretNameField       = ".spec.tls.caBundleSecretName"
+	tlsAPIcaBundleSecretNameField = ".spec.tls.api.endpoint.secretName"
+)
+
+var (
+	allWatchFields = []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+	}
+)
+
 // SetupWithManager -
 func (r *KeystoneAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := mgr.GetLogger()
+
+	// index caBundleSecretNameField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &keystonev1.KeystoneAPI{}, caBundleSecretNameField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*keystonev1.KeystoneAPI)
+		if cr.Spec.TLS.CaBundleSecretName == "" {
+			return nil
+		}
+		return []string{cr.Spec.TLS.CaBundleSecretName}
+	}); err != nil {
+		return err
+	}
+
+	// index caBundleSecretNameField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &keystonev1.KeystoneAPI{}, tlsAPIcaBundleSecretNameField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*keystonev1.KeystoneAPI)
+
+		var res []string
+		for _, endptCfg := range cr.Spec.TLS.API.Endpoint {
+			if endptCfg.SecretName == nil {
+				continue
+			}
+			// just return the raw field value -- the indexer will take care of dealing with namespaces for us
+			res = append(res, *endptCfg.SecretName)
+		}
+		return res
+	}); err != nil {
+		return err
+	}
 
 	memcachedFn := func(o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
@@ -261,7 +308,41 @@ func (r *KeystoneAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.RoleBinding{}).
 		Watches(&source.Kind{Type: &memcachedv1.Memcached{}},
 			handler.EnqueueRequestsFromMapFunc(memcachedFn)).
+		Watches(
+			&source.Kind{Type: &corev1.Secret{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
+}
+
+func (r *KeystoneAPIReconciler) findObjectsForSrc(src client.Object) []reconcile.Request {
+	requests := []reconcile.Request{}
+
+	for _, field := range allWatchFields {
+		crList := &keystonev1.KeystoneAPIList{}
+		listOps := &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
+			Namespace:     src.GetNamespace(),
+		}
+		err := r.List(context.TODO(), crList, listOps)
+		if err != nil {
+			return []reconcile.Request{}
+		}
+
+		for _, item := range crList.Items {
+			requests = append(requests,
+				reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      item.GetName(),
+						Namespace: item.GetNamespace(),
+					},
+				},
+			)
+		}
+	}
+
+	return requests
 }
 
 func (r *KeystoneAPIReconciler) reconcileDelete(ctx context.Context, instance *keystonev1.KeystoneAPI, helper *helper.Helper) (ctrl.Result, error) {

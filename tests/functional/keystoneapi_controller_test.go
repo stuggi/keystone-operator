@@ -34,6 +34,7 @@ import (
 var _ = Describe("Keystone controller", func() {
 
 	var keystoneApiName types.NamespacedName
+	var keystoneApiConfigDataName types.NamespacedName
 	var dbSyncJobName types.NamespacedName
 	var bootstrapJobName types.NamespacedName
 	var deploymentName types.NamespacedName
@@ -58,6 +59,10 @@ var _ = Describe("Keystone controller", func() {
 		}
 		deploymentName = types.NamespacedName{
 			Name:      "keystone",
+			Namespace: namespace,
+		}
+		keystoneApiConfigDataName = types.NamespacedName{
+			Name:      "keystone-config-data",
 			Namespace: namespace,
 		}
 		caBundleSecretName = types.NamespacedName{
@@ -737,6 +742,17 @@ var _ = Describe("Keystone controller", func() {
 
 			Expect(container.ReadinessProbe.HTTPGet.Scheme).To(Equal(corev1.URISchemeHTTPS))
 			Expect(container.LivenessProbe.HTTPGet.Scheme).To(Equal(corev1.URISchemeHTTPS))
+
+			configDataMap := th.GetConfigMap(keystoneApiConfigDataName)
+			Expect(configDataMap).ShouldNot(BeNil())
+			Expect(configDataMap.Data).Should(HaveKey("httpd.conf"))
+			Expect(configDataMap.Data).Should(HaveKey("ssl.conf"))
+			configData := string(configDataMap.Data["httpd.conf"])
+			Expect(configData).Should(ContainSubstring("SSLEngine on"))
+			Expect(configData).Should(ContainSubstring("SSLCertificateFile      \"/etc/pki/tls/certs/internal.crt\""))
+			Expect(configData).Should(ContainSubstring("SSLCertificateKeyFile   \"/etc/pki/tls/private/internal.key\""))
+			Expect(configData).Should(ContainSubstring("SSLCertificateFile      \"/etc/pki/tls/certs/public.crt\""))
+			Expect(configData).Should(ContainSubstring("SSLCertificateKeyFile   \"/etc/pki/tls/private/public.key\""))
 		})
 
 		It("registers endpointURL as public keystone endpoint", func() {

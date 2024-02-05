@@ -1179,6 +1179,12 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		customData[key] = data
 	}
 
+	var mysqlTLSConfig string
+	if instance.Spec.TLS.API.Internal.Enabled() {
+		t := &tls.Service{CaMount: ptr.To(tls.DownstreamTLSCABundlePath)}
+		mysqlTLSConfig = t.CreateDatabaseClientConfig("")
+	}
+
 	transportURLSecret, _, err := secret.GetSecret(ctx, h, instance.Status.TransportURLSecret, instance.Namespace)
 	if err != nil {
 		return err
@@ -1187,6 +1193,7 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	templateParameters := map[string]interface{}{
 		"memcachedServers": strings.Join(mc.Status.ServerList, ","),
 		"TransportURL":     string(transportURLSecret.Data["transport_url"]),
+		"mysqlTLSConfig":   mysqlTLSConfig,
 	}
 
 	// create httpd  vhost template parameters

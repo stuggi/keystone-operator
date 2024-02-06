@@ -21,36 +21,25 @@ import (
 
 // getVolumes - service volumes
 func getVolumes(name string) []corev1.Volume {
-	var scriptsVolumeDefaultMode int32 = 0755
 	var config0640AccessMode int32 = 0640
 
 	return []corev1.Volume{
 		{
-			Name: "scripts",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					DefaultMode: &scriptsVolumeDefaultMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name + "-scripts",
-					},
-				},
-			},
-		},
-		{
 			Name: "config-data",
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &config0640AccessMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name + "-config-data",
-					},
+					SecretName:  name + "-config-data",
 				},
 			},
 		},
 		{
-			Name: "config-data-merged",
+			Name: "db-config-data",
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &config0640AccessMode,
+					SecretName:  "database-config-" + name,
+				},
 			},
 		},
 		{
@@ -93,8 +82,8 @@ func getVolumes(name string) []corev1.Volume {
 
 }
 
-// getInitVolumeMounts - general init task VolumeMounts
-func getInitVolumeMounts() []corev1.VolumeMount {
+// getVolumeMounts - general VolumeMounts
+func getVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      "scripts",
@@ -107,30 +96,15 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-data-merged",
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-	}
-}
-
-// getVolumeMounts - general VolumeMounts
-func getVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      "scripts",
-			MountPath: "/usr/local/bin/container-scripts",
+			Name:      "config-data",
+			MountPath: "/var/lib/kolla/config_files/config.json",
+			SubPath:   "keystone-api-config.json",
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-data-merged",
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-		{
-			Name:      "config-data-merged",
-			MountPath: "/var/lib/kolla/config_files/config.json",
-			SubPath:   "keystone-api-config.json",
+			Name:      "config-data",
+			MountPath: "/etc/my.cnf",
+			SubPath:   "my.cnf",
 			ReadOnly:  true,
 		},
 		{

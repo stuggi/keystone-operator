@@ -463,65 +463,6 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 	}
 
 	//
-	// create service DB instance
-	//
-	db := mariadbv1.NewDatabase(
-		instance.Name,
-		instance.Spec.DatabaseUser,
-		instance.Spec.Secret,
-		map[string]string{
-			"dbName": instance.Spec.DatabaseInstance,
-		},
-	)
-	// create or patch the DB
-	ctrlResult, err := db.CreateOrPatchDB(
-		ctx,
-		helper,
-	)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.DBReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	if (ctrlResult != ctrl.Result{}) {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.RequestedReason,
-			condition.SeverityInfo,
-			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
-	}
-
-	// wait for the DB to be setup
-	ctrlResult, err = db.WaitForDBCreated(ctx, helper)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.DBReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, err
-	}
-	if (ctrlResult != ctrl.Result{}) {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.RequestedReason,
-			condition.SeverityInfo,
-			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
-	}
-	// update Status.DatabaseHostname, used to bootstrap/config the service
-	instance.Status.DatabaseHostname = db.GetDatabaseHostname()
-	instance.Status.Conditions.MarkTrue(condition.DBReadyCondition, condition.DBReadyMessage)
-
-	// create service DB - end
-
-	//
 	// run keystone db sync
 	//
 	dbSyncHash := instance.Status.Hash[keystonev1.DbSyncHash]
@@ -533,7 +474,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 		5*time.Second,
 		dbSyncHash,
 	)
-	ctrlResult, err = dbSyncjob.DoJob(
+	ctrlResult, err := dbSyncjob.DoJob(
 		ctx,
 		helper,
 	)
@@ -788,6 +729,75 @@ func (r *KeystoneAPIReconciler) reconcileNormal(
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
 	// run check OpenStack secret - end
+
+	//
+	// create service DB instance
+	//
+	db := mariadbv1.NewDatabase(
+		instance.Name,
+		instance.Spec.DatabaseUser,
+		instance.Spec.Secret,
+		map[string]string{
+			"dbName": instance.Spec.DatabaseInstance,
+		},
+	)
+	// create or patch the DB
+	ctrlResult, err := db.CreateOrPatchDB(
+		ctx,
+		helper,
+	)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.DBReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DBReadyRunningMessage))
+		return ctrlResult, nil
+	}
+
+	// wait for the DB to be setup
+	ctrlResult, err = db.WaitForDBCreated(ctx, helper)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.DBReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, err
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DBReadyRunningMessage))
+		return ctrlResult, nil
+	}
+	// update Status.DatabaseHostname, used to bootstrap/config the service
+	if db.GetDatabaseSecret() != "" {
+		instance.Status.DatabaseSecret = db.GetDatabaseSecret()
+	} else {
+		//TODO - wait for secret
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DBReadyRunningMessage))
+		return ctrlResult, nil
+	}
+	instance.Status.Conditions.MarkTrue(condition.DBReadyCondition, condition.DBReadyMessage)
+
+	// create service DB - end
 
 	//
 	// create RabbitMQ transportURL CR and get the actual URL from the associated secret that is created
@@ -1179,10 +1189,9 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		customData[key] = data
 	}
 
-	var mysqlTLSConfig string
-	if instance.Spec.TLS.API.Internal.Enabled() {
-		t := &tls.Service{CaMount: ptr.To(tls.DownstreamTLSCABundlePath)}
-		mysqlTLSConfig = t.CreateDatabaseClientConfig("")
+	databaseSecret, _, err := secret.GetSecret(ctx, h, instance.Status.DatabaseSecret, instance.Namespace)
+	if err != nil {
+		return err
 	}
 
 	transportURLSecret, _, err := secret.GetSecret(ctx, h, instance.Status.TransportURLSecret, instance.Namespace)
@@ -1193,7 +1202,7 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	templateParameters := map[string]interface{}{
 		"memcachedServers": strings.Join(mc.Status.ServerList, ","),
 		"TransportURL":     string(transportURLSecret.Data["transport_url"]),
-		"mysqlTLSConfig":   mysqlTLSConfig,
+		"connection":       string(databaseSecret.Data["connection"]),
 	}
 
 	// create httpd  vhost template parameters
@@ -1212,16 +1221,6 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	templateParameters["VHosts"] = httpdVhostConfig
 
 	cms := []util.Template{
-		// ScriptsConfigMap
-		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
-		},
-		// ConfigMap
 		{
 			Name:          fmt.Sprintf("%s-config-data", instance.Name),
 			Namespace:     instance.Namespace,
@@ -1232,7 +1231,7 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 			Labels:        cmLabels,
 		},
 	}
-	return configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
+	return secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 }
 
 // reconcileConfigMap -  creates clouds.yaml

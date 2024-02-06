@@ -204,6 +204,9 @@ type KeystoneAPIStatus struct {
 
 	// TransportURLSecret - Secret containing RabbitMQ transportURL
 	TransportURLSecret string `json:"transportURLSecret,omitempty"`
+
+	// DatabaseSecret - Secret containing database connection and client config
+	DatabaseSecret string `json:"databaseSecret,omitempty"`
 }
 
 //+kubebuilder:object:root=true

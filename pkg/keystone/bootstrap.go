@@ -62,13 +62,11 @@ func BootstrapJob(
 	// create Volume and VolumeMounts
 	volumes := getVolumes(instance.Name)
 	volumeMounts := getVolumeMounts()
-	initVolumeMounts := getInitVolumeMounts()
 
 	// add CA cert if defined
 	if instance.Spec.TLS.CaBundleSecretName != "" {
 		volumes = append(getVolumes(instance.Name), instance.Spec.TLS.CreateVolume())
 		volumeMounts = append(getVolumeMounts(), instance.Spec.TLS.CreateVolumeMounts(nil)...)
-		initVolumeMounts = append(getInitVolumeMounts(), instance.Spec.TLS.CreateVolumeMounts(nil)...)
 	}
 
 	job := &batchv1.Job{
@@ -118,18 +116,6 @@ func BootstrapJob(
 		},
 	}
 	job.Spec.Template.Spec.Containers[0].Env = env.MergeEnvs(job.Spec.Template.Spec.Containers[0].Env, envVars)
-
-	initContainerDetails := APIDetails{
-		ContainerImage:       instance.Spec.ContainerImage,
-		DatabaseHost:         instance.Status.DatabaseHostname,
-		DatabaseUser:         instance.Spec.DatabaseUser,
-		DatabaseName:         DatabaseName,
-		OSPSecret:            instance.Spec.Secret,
-		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
-		UserPasswordSelector: instance.Spec.PasswordSelectors.Admin,
-		VolumeMounts:         initVolumeMounts,
-	}
-	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
 
 	return job
 }

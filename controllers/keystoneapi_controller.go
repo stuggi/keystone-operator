@@ -1327,6 +1327,7 @@ func (r *KeystoneAPIReconciler) ensureFernetKeys(
 	helper *helper.Helper,
 	envVars *map[string]env.Setter,
 ) error {
+	annotations := map[string]string{}
 	fernetAnnotation := labels.GetGroupLabel(keystone.ServiceName) + "/rotatedat"
 	labels := labels.GetLabels(instance, labels.GetGroupLabel(keystone.ServiceName), map[string]string{})
 	now := time.Now().UTC()
@@ -1351,7 +1352,7 @@ func (r *KeystoneAPIReconciler) ensureFernetKeys(
 			fernetKeys[fmt.Sprintf("FernetKeys%d", i)] = keystone.GenerateFernetKey()
 		}
 
-		annotations := map[string]string{
+		annotations = map[string]string{
 			fernetAnnotation: now.Format(time.RFC3339)}
 
 		tmpl := []util.Template{
@@ -1383,7 +1384,6 @@ func (r *KeystoneAPIReconciler) ensureFernetKeys(
 		duration := int(*instance.Spec.FernetRotationDays)
 
 		if err != nil {
-			secret.Annotations[fernetAnnotation] = now.Format(time.RFC3339)
 			changedKeys = true
 		} else if rotatedAt.AddDate(0, 0, duration).Before(now) {
 			secret.Data[extraKey] = secret.Data["FernetKeys0"]
@@ -1446,18 +1446,15 @@ func (r *KeystoneAPIReconciler) ensureFernetKeys(
 			fernetKeys[k] = string(v[:])
 		}
 
-		tmpl := []util.Template{
-			{
-				Name:        secretName,
-				Namespace:   instance.Namespace,
-				Type:        util.TemplateTypeNone,
-				CustomData:  fernetKeys,
-				Labels:      labels,
-				Annotations: secret.Annotations,
-			},
+		if secret.Annotations == nil {
+			secret.Annotations = map[string]string{
+				fernetAnnotation: now.Format(time.RFC3339),
+			}
+		} else {
+			secret.Annotations[fernetAnnotation] = now.Format(time.RFC3339)
 		}
 
-		err = oko_secret.EnsureSecrets(ctx, helper, instance, tmpl, envVars)
+		err = helper.GetClient().Update(ctx, secret, &client.UpdateOptions{})
 		if err != nil {
 			return err
 		}

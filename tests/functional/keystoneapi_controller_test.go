@@ -17,11 +17,15 @@ limitations under the License.
 package functional_test
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
+	"strconv"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	//revive:disable-next-line:dot-imports
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
@@ -1103,6 +1107,89 @@ var _ = Describe("Keystone controller", func() {
 				condition.ReadyCondition,
 				corev1.ConditionTrue,
 			)
+		})
+	})
+
+	When("When the fernet token exire", func() {
+		BeforeEach(func() {
+			DeferCleanup(
+				k8sClient.Delete, ctx, CreateKeystoneMessageBusSecret(namespace, "rabbitmq-secret"))
+			DeferCleanup(th.DeleteInstance, CreateKeystoneAPI(keystoneAPIName, GetDefaultKeystoneAPISpec()))
+			DeferCleanup(
+				k8sClient.Delete, ctx, CreateKeystoneAPISecret(namespace, SecretName))
+			DeferCleanup(infra.DeleteMemcached, infra.CreateMemcached(namespace, "memcached", memcachedSpec))
+			DeferCleanup(
+				mariadb.DeleteDBService,
+				mariadb.CreateDBService(
+					namespace,
+					GetKeystoneAPI(keystoneAPIName).Spec.DatabaseInstance,
+					corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 3306}},
+					},
+				),
+			)
+			mariadb.SimulateMariaDBAccountCompleted(keystoneAccountName)
+			mariadb.SimulateMariaDBDatabaseCompleted(keystoneDatabaseName)
+			infra.SimulateTransportURLReady(types.NamespacedName{
+				Name:      fmt.Sprintf("%s-keystone-transport", keystoneAPIName.Name),
+				Namespace: namespace,
+			})
+			infra.SimulateMemcachedReady(types.NamespacedName{
+				Name:      "memcached",
+				Namespace: namespace,
+			})
+			th.SimulateJobSuccess(dbSyncJobName)
+			th.SimulateJobSuccess(bootstrapJobName)
+			th.SimulateDeploymentReplicaReady(deploymentName)
+		})
+
+		It("rotates the fernet keys", func() {
+			keystone := GetKeystoneAPI(keystoneAPIName)
+			currentHash := keystone.Status.Hash["input"]
+
+			currentSecret := th.GetSecret(types.NamespacedName{Namespace: keystoneAPIName.Namespace, Name: "keystone"})
+			Expect(currentSecret).ToNot(BeNil())
+
+			th.Logger.Info(fmt.Sprintf("BOOO currentSecret %+v", currentSecret))
+
+			rotatedAt, err := time.Parse(time.RFC3339, currentSecret.Annotations["keystone.openstack.org/rotatedat"])
+			Expect(err).To(BeNil())
+			th.Logger.Info(fmt.Sprintf("BOOO 1 %+v", rotatedAt))
+
+			// set date to yesterday
+			currentSecret.Annotations["keystone.openstack.org/rotatedat"] = rotatedAt.Add(-25 * time.Hour).Format(time.RFC3339)
+			err = k8sClient.Update(ctx, ptr.To(currentSecret), &client.UpdateOptions{})
+			Expect(err).To(BeNil())
+
+			th.Logger.Info(fmt.Sprintf("BOOO 2 %+v", currentSecret.Annotations["keystone.openstack.org/rotatedat"]))
+
+			Eventually(func(g Gomega) {
+				keystone = GetKeystoneAPI(keystoneAPIName)
+				g.Expect(keystone.Status.Hash["input"]).ToNot(Equal(currentHash))
+
+				updatedSecret := th.GetSecret(types.NamespacedName{Namespace: keystoneAPIName.Namespace, Name: "keystone"})
+				g.Expect(updatedSecret).ToNot(BeNil())
+
+				th.Logger.Info(fmt.Sprintf("BOOO updatedSecret %+v", updatedSecret))
+
+				for i := 1; i < 5; i++ {
+					oldKey := currentSecret.Data["FernetKeys"+strconv.Itoa(i)]
+					newKey := updatedSecret.Data["FernetKeys"+strconv.Itoa((i+1))]
+
+					oldKeyOut := make([]byte, base64.StdEncoding.DecodedLen(len(oldKey)))
+					base64.StdEncoding.Decode(oldKeyOut, oldKey)
+
+					newKeyOut := make([]byte, base64.StdEncoding.DecodedLen(len(newKey)))
+					base64.StdEncoding.Decode(newKeyOut, newKey)
+
+					th.Logger.Info(fmt.Sprintf("BOOO oldKey %+v", string(oldKeyOut)))
+					th.Logger.Info(fmt.Sprintf("BOOO newKey %+v", string(newKeyOut)))
+
+					g.Expect(oldKeyOut).To(Equal(newKeyOut))
+
+				}
+			}, timeout, interval).Should(Succeed())
+
 		})
 	})
 

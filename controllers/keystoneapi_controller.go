@@ -233,10 +233,11 @@ func (r *KeystoneAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // fields to index to reconcile when change
 const (
-	passwordSecretField     = ".spec.secret"
-	caBundleSecretNameField = ".spec.tls.caBundleSecretName"
-	tlsAPIInternalField     = ".spec.tls.api.internal.secretName"
-	tlsAPIPublicField       = ".spec.tls.api.public.secretName"
+	passwordSecretField                 = ".spec.secret"
+	caBundleSecretNameField             = ".spec.tls.caBundleSecretName"
+	tlsAPIInternalField                 = ".spec.tls.api.internal.secretName"
+	tlsAPIPublicField                   = ".spec.tls.api.public.secretName"
+	httpdCustomServiceConfigSecretField = ".spec.httpdCustomization.customServiceConfigSecret"
 )
 
 var allWatchFields = []string{
@@ -244,6 +245,7 @@ var allWatchFields = []string{
 	caBundleSecretNameField,
 	tlsAPIInternalField,
 	tlsAPIPublicField,
+	httpdCustomServiceConfigSecretField,
 }
 
 // SetupWithManager -
@@ -294,6 +296,18 @@ func (r *KeystoneAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.M
 			return nil
 		}
 		return []string{*cr.Spec.TLS.API.Public.SecretName}
+	}); err != nil {
+		return err
+	}
+
+	// index httpdOverrideSecretField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &keystonev1.KeystoneAPI{}, httpdCustomServiceConfigSecretField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*keystonev1.KeystoneAPI)
+		if cr.Spec.HttpdCustomization.CustomServiceConfigSecret == nil {
+			return nil
+		}
+		return []string{*cr.Spec.HttpdCustomization.CustomServiceConfigSecret}
 	}); err != nil {
 		return err
 	}
@@ -1201,7 +1215,19 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		"fernetMaxActiveKeys": instance.Spec.FernetMaxActiveKeys,
 	}
 
+	templateParameters["KeystoneEndpointPublic"], _ = instance.GetEndpoint(endpoint.EndpointPublic)
+	templateParameters["KeystoneEndpointInternal"], _ = instance.GetEndpoint(endpoint.EndpointInternal)
+
+	httpdOverrideSecret := &corev1.Secret{}
+	if instance.Spec.HttpdCustomization.CustomServiceConfigSecret != nil && *instance.Spec.HttpdCustomization.CustomServiceConfigSecret != "" {
+		httpdOverrideSecret, _, err = oko_secret.GetSecret(ctx, h, *instance.Spec.HttpdCustomization.CustomServiceConfigSecret, instance.Namespace)
+		if err != nil {
+			return err
+		}
+	}
+
 	// create httpd  vhost template parameters
+	customTemplates := map[string]string{}
 	httpdVhostConfig := map[string]interface{}{}
 	for _, endpt := range []service.Endpoint{service.EndpointInternal, service.EndpointPublic} {
 		endptConfig := map[string]interface{}{}
@@ -1211,6 +1237,16 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 			endptConfig["TLS"] = true
 			endptConfig["SSLCertificateFile"] = fmt.Sprintf("/etc/pki/tls/certs/%s.crt", endpt.String())
 			endptConfig["SSLCertificateKeyFile"] = fmt.Sprintf("/etc/pki/tls/private/%s.key", endpt.String())
+		}
+
+		endptConfig["Override"] = false
+		if len(httpdOverrideSecret.Data) > 0 {
+			endptConfig["Override"] = true
+			for key, data := range httpdOverrideSecret.Data {
+				if len(data) > 0 {
+					customTemplates["httpd_custom_"+endpt.String()+"_"+key] = string(data)
+				}
+			}
 		}
 		httpdVhostConfig[endpt.String()] = endptConfig
 	}
@@ -1227,13 +1263,14 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		},
 		// Configs
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			CustomData:    customData,
-			ConfigOptions: templateParameters,
-			Labels:        cmLabels,
+			Name:           fmt.Sprintf("%s-config-data", instance.Name),
+			Namespace:      instance.Namespace,
+			Type:           util.TemplateTypeConfig,
+			InstanceType:   instance.Kind,
+			StringTemplate: customTemplates,
+			CustomData:     customData,
+			ConfigOptions:  templateParameters,
+			Labels:         cmLabels,
 		},
 	}
 	return oko_secret.EnsureSecrets(ctx, h, instance, tmpl, envVars)

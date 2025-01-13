@@ -1569,8 +1569,8 @@ var _ = Describe("Keystone controller", func() {
 		BeforeEach(func() {
 			customServiceConfigSecretName := types.NamespacedName{Name: "foo", Namespace: namespace}
 			customConfig := []byte(`OIDCResponseType "id_token"
-OIDCMemCacheServers "{{ .memcachedServers }}"
-OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/openid"`)
+OIDCMemCacheServers "{{ .v1.memcachedServers }}"
+OIDCRedirectURI "{{ .v1.KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/openid"`)
 			th.CreateSecret(
 				customServiceConfigSecretName,
 				map[string][]byte{
@@ -1618,13 +1618,17 @@ OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/open
 		It("it renders the overrideTemplate and adds it to the keystone-config-data secret", func() {
 			scrt := th.GetSecret(keystoneAPIConfigDataName)
 			Expect(scrt).ShouldNot(BeNil())
+			Expect(scrt.Data).Should(HaveKey("templatingParameters"))
+			configData := string(scrt.Data["templatingParameters"])
+			memcachedServers := fmt.Sprintf("memcached-0.memcached.%s.svc:11211,memcached-1.memcached.%s.svc:11211,memcached-2.memcached.%s.svc:11211",
+				namespace, namespace, namespace)
+			Expect(configData).Should(ContainSubstring(fmt.Sprintf("memcachedServers: %s", memcachedServers)))
+
 			for _, cfg := range []string{"httpd_custom_internal_bar.conf", "httpd_custom_public_bar.conf"} {
 				Expect(scrt.Data).Should(HaveKey(cfg))
 				configData := string(scrt.Data[cfg])
 				Expect(configData).Should(ContainSubstring("OIDCResponseType \"id_token\""))
-				Expect(configData).Should(ContainSubstring(
-					fmt.Sprintf("OIDCMemCacheServers \"memcached-0.memcached.%s.svc:11211,memcached-1.memcached.%s.svc:11211,memcached-2.memcached.%s.svc:11211\"",
-						namespace, namespace, namespace)))
+				Expect(configData).Should(ContainSubstring(fmt.Sprintf("OIDCMemCacheServers \"%s\"", memcachedServers)))
 				Expect(configData).Should(ContainSubstring(
 					fmt.Sprintf("OIDCRedirectURI \"http://keystone-public.%s.svc:5000/v3/auth/OS-FEDERATION/websso/openid\"", namespace)))
 			}

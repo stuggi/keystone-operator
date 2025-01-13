@@ -1199,7 +1199,7 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	databaseAccount := db.GetAccount()
 	dbSecret := db.GetSecret()
 
-	templateParameters := map[string]interface{}{
+	v1 := map[string]interface{}{
 		"memcachedServers":         mc.GetMemcachedServerListString(),
 		"memcachedServersWithInet": mc.GetMemcachedServerListWithInetString(),
 		"memcachedTLS":             mc.GetMemcachedTLSSupport(),
@@ -1215,8 +1215,8 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		"fernetMaxActiveKeys": instance.Spec.FernetMaxActiveKeys,
 	}
 
-	templateParameters["KeystoneEndpointPublic"], _ = instance.GetEndpoint(endpoint.EndpointPublic)
-	templateParameters["KeystoneEndpointInternal"], _ = instance.GetEndpoint(endpoint.EndpointInternal)
+	v1["KeystoneEndpointPublic"], _ = instance.GetEndpoint(endpoint.EndpointPublic)
+	v1["KeystoneEndpointInternal"], _ = instance.GetEndpoint(endpoint.EndpointInternal)
 
 	httpdOverrideSecret := &corev1.Secret{}
 	if instance.Spec.HttpdCustomization.CustomServiceConfigSecret != nil && *instance.Spec.HttpdCustomization.CustomServiceConfigSecret != "" {
@@ -1250,7 +1250,17 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 		}
 		httpdVhostConfig[endpt.String()] = endptConfig
 	}
-	templateParameters["VHosts"] = httpdVhostConfig
+	v1["VHosts"] = httpdVhostConfig
+
+	templateParameters := make(map[string]interface{})
+	templateParameters["v1"] = v1
+
+	// Marshal the templateParameters map to YAML
+	yamlData, err := yaml.Marshal(templateParameters)
+	if err != nil {
+		return fmt.Errorf("Error marshalling to YAML: %w", err)
+	}
+	customData["templatingParameters"] = string(yamlData)
 
 	tmpl := []util.Template{
 		// Scripts
@@ -1330,7 +1340,7 @@ func (r *KeystoneAPIReconciler) reconcileCloudConfig(
 			Name:      instance.Spec.Secret,
 			Namespace: instance.Namespace,
 		},
-		Type: "Opaque",
+		Type: corev1.SecretTypeOpaque,
 	}
 
 	err = r.Client.Get(ctx, types.NamespacedName{Name: keystoneSecret.Name, Namespace: instance.Namespace}, keystoneSecret)

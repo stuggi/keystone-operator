@@ -51,13 +51,13 @@ func Deployment(
 		// TODO might need tuning
 		TimeoutSeconds:      30,
 		PeriodSeconds:       30,
-		InitialDelaySeconds: 5,
+		InitialDelaySeconds: 60,
 	}
 	readinessProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      30,
 		PeriodSeconds:       30,
-		InitialDelaySeconds: 5,
+		InitialDelaySeconds: 60,
 	}
 
 	args := []string{"-c", ServiceCommand}

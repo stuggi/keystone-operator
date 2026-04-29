@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -54,9 +53,7 @@ func SetupKeystoneAPIDefaults(defaults KeystoneAPIDefaults) {
 	keystoneapilog.Info("KeystoneAPI defaults initialized", "defaults", defaults)
 }
 
-var _ webhook.Defaulter = &KeystoneAPI{}
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default sets default values for the KeystoneAPI resource
 func (r *KeystoneAPI) Default() {
 	keystoneapilog.Info("default", "name", r.Name)
 
@@ -84,9 +81,7 @@ func (spec *KeystoneAPISpecCore) Default() {
 	// This ensures users make a conscious choice about which cluster to use for notifications
 }
 
-var _ webhook.Validator = &KeystoneAPI{}
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate validates the KeystoneAPI resource on creation
 func (r *KeystoneAPI) ValidateCreate() (admission.Warnings, error) {
 	keystoneapilog.Info("validate create", "name", r.Name)
 
@@ -134,7 +129,7 @@ func (spec *KeystoneAPISpecCore) ValidateCreate(basePath *field.Path, namespace 
 	return allWarns, allErrs
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate validates the KeystoneAPI resource on update
 func (r *KeystoneAPI) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	keystoneapilog.Info("validate update", "name", r.Name)
 
@@ -187,7 +182,7 @@ func (spec *KeystoneAPISpecCore) ValidateUpdate(old KeystoneAPISpecCore, basePat
 	return allWarns, allErrs
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
+// ValidateDelete validates the KeystoneAPI resource on deletion
 func (r *KeystoneAPI) ValidateDelete() (admission.Warnings, error) {
 	keystoneapilog.Info("validate delete", "name", r.Name)
 

@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
 	"github.com/openstack-k8s-operators/lib-common/modules/users"
@@ -32,7 +32,7 @@ import (
 
 // CronJob func
 func CronJob(
-	instance *keystonev1.KeystoneAPI,
+	instance *keystonev1beta2.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
 	memcached *memcachedv1.Memcached,
@@ -49,7 +49,7 @@ func CronJob(
 	completions := int32(1)
 
 	// create Volume and VolumeMounts
-	keystoneCronJobExtraMounts := []keystonev1.KeystoneExtraMounts{}
+	keystoneCronJobExtraMounts := []keystonev1beta2.KeystoneExtraMounts{}
 	volumes := getVolumes(instance, keystoneCronJobExtraMounts, KeystoneCronJobPropagation)
 	volumeMounts := getCronJobVolumeMounts()
 

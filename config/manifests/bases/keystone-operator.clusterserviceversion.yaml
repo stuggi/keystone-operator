@@ -27,6 +27,21 @@ spec:
       - description: TLS - Parameters related to the TLS
         displayName: TLS
         path: tls
+      version: v1beta2
+    - description: KeystoneAPI is the Schema for the keystoneapis API
+      displayName: Keystone API
+      kind: KeystoneAPI
+      name: keystoneapis.keystone.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
+      version: v1beta1
+    - description: KeystoneApplicationCredential is the Schema for the applicationcredentials
+        API
+      displayName: Keystone Application Credential
+      kind: KeystoneApplicationCredential
+      name: keystoneapplicationcredentials.keystone.openstack.org
       version: v1beta1
     - description: KeystoneEndpoint is the Schema for the keystoneendpoints API
       displayName: Keystone Endpoint

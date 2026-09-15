@@ -16,7 +16,7 @@ limitations under the License.
 package keystone
 
 import (
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
@@ -30,7 +30,7 @@ import (
 
 // DbSyncJob func
 func DbSyncJob(
-	instance *keystonev1.KeystoneAPI,
+	instance *keystonev1beta2.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
 ) *batchv1.Job {
@@ -40,7 +40,7 @@ func DbSyncJob(
 	envVars := map[string]env.Setter{}
 
 	// create Volume and VolumeMounts
-	dbSyncExtraMounts := []keystonev1.KeystoneExtraMounts{}
+	dbSyncExtraMounts := []keystonev1beta2.KeystoneExtraMounts{}
 	volumes := getVolumes(instance, dbSyncExtraMounts, DBSyncPropagation)
 	volumeMounts := getDBSyncVolumeMounts()
 

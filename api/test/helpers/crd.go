@@ -22,7 +22,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/onsi/gomega"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,17 +60,17 @@ func NewTestHelper(
 //	keystoneAPI := th.CreateKeystoneAPI(namespace)
 //	DeferCleanup(th.DeleteKeystoneAPI, keystoneAPI)
 func (th *TestHelper) CreateKeystoneAPI(namespace string) types.NamespacedName {
-	keystone := &keystonev1.KeystoneAPI{
+	keystone := &keystonev1beta2.KeystoneAPI{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "keystone.openstack.org/v1beta1",
+			APIVersion: "keystone.openstack.org/v1beta2",
 			Kind:       "KeystoneAPI",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "keystone-" + uuid.New().String(),
 			Namespace: namespace,
 		},
-		Spec: keystonev1.KeystoneAPISpec{
-			KeystoneAPISpecCore: keystonev1.KeystoneAPISpecCore{
+		Spec: keystonev1beta2.KeystoneAPISpec{
+			KeystoneAPISpecCore: keystonev1beta2.KeystoneAPISpecCore{
 				APITimeout: 60,
 			},
 		},
@@ -80,7 +81,7 @@ func (th *TestHelper) CreateKeystoneAPI(namespace string) types.NamespacedName {
 
 	// the Status field needs to be written via a separate client
 	keystone = th.GetKeystoneAPI(name)
-	keystone.Status = keystonev1.KeystoneAPIStatus{
+	keystone.Status = keystonev1beta2.KeystoneAPIStatus{
 		APIEndpoints: map[string]string{
 			"public":   "http://keystone-public-openstack.testing",
 			"internal": "http://keystone-internal.openstack.svc:5000",
@@ -107,20 +108,20 @@ func (th *TestHelper) CreateKeystoneAPIWithFixture(
 		},
 	)
 
-	keystone := &keystonev1.KeystoneAPI{
+	keystone := &keystonev1beta2.KeystoneAPI{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "keystone.openstack.org/v1beta1",
+			APIVersion: "keystone.openstack.org/v1beta2",
 			Kind:       "KeystoneAPI",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n,
 			Namespace: namespace,
 		},
-		Spec: keystonev1.KeystoneAPISpec{
-			KeystoneAPISpecCore: keystonev1.KeystoneAPISpecCore{
+		Spec: keystonev1beta2.KeystoneAPISpec{
+			KeystoneAPISpecCore: keystonev1beta2.KeystoneAPISpecCore{
 				Secret:    n + "-secret",
 				AdminUser: "admin",
-				PasswordSelectors: keystonev1.PasswordSelector{
+				PasswordSelectors: keystonev1beta2.PasswordSelector{
 					Admin: "admin-password",
 				},
 				APITimeout: 60,
@@ -133,7 +134,7 @@ func (th *TestHelper) CreateKeystoneAPIWithFixture(
 
 	// the Status field needs to be written via a separate client
 	keystone = th.GetKeystoneAPI(name)
-	keystone.Status = keystonev1.KeystoneAPIStatus{
+	keystone.Status = keystonev1beta2.KeystoneAPIStatus{
 		APIEndpoints: map[string]string{
 			"public":   fixture.Endpoint(),
 			"internal": "http://keystone-internal.openstack.svc:5000",
@@ -171,7 +172,7 @@ func (th *TestHelper) UpdateKeystoneAPIEndpoint(name types.NamespacedName, key s
 //	DeferCleanup(th.DeleteKeystoneAPI, keystoneAPI)
 func (th *TestHelper) DeleteKeystoneAPI(name types.NamespacedName) {
 	gomega.Eventually(func(g gomega.Gomega) {
-		keystone := &keystonev1.KeystoneAPI{}
+		keystone := &keystonev1beta2.KeystoneAPI{}
 		err := th.K8sClient.Get(th.Ctx, name, keystone)
 		// if it is already gone that is OK
 		if k8s_errors.IsNotFound(err) {
@@ -194,8 +195,8 @@ func (th *TestHelper) DeleteKeystoneAPI(name types.NamespacedName) {
 //	  keystoneAPIName := th.CreateKeystoneAPI(novaNames.NovaName.Namespace)
 //		 DeferCleanup(th.DeleteKeystoneAPI, keystoneAPIName)
 //		 keystoneAPI := th.GetKeystoneAPI(keystoneAPIName)
-func (th *TestHelper) GetKeystoneAPI(name types.NamespacedName) *keystonev1.KeystoneAPI {
-	instance := &keystonev1.KeystoneAPI{}
+func (th *TestHelper) GetKeystoneAPI(name types.NamespacedName) *keystonev1beta2.KeystoneAPI {
+	instance := &keystonev1beta2.KeystoneAPI{}
 	gomega.Eventually(func(g gomega.Gomega) {
 		g.Expect(th.K8sClient.Get(th.Ctx, name, instance)).Should(gomega.Succeed())
 	}, th.Timeout, th.Interval).Should(gomega.Succeed())
@@ -222,8 +223,8 @@ func (th *TestHelper) SimulateKeystoneAPIReady(name types.NamespacedName) {
 // Example usage:
 //
 //	keystoneServiceName := th.CreateKeystoneService(namespace)
-func (th *TestHelper) GetKeystoneService(name types.NamespacedName) *keystonev1.KeystoneService {
-	instance := &keystonev1.KeystoneService{}
+func (th *TestHelper) GetKeystoneService(name types.NamespacedName) *keystonev1beta1.KeystoneService {
+	instance := &keystonev1beta1.KeystoneService{}
 	gomega.Eventually(func(g gomega.Gomega) {
 		g.Expect(th.K8sClient.Get(th.Ctx, name, instance)).Should(gomega.Succeed())
 	}, th.Timeout, th.Interval).Should(gomega.Succeed())
@@ -246,7 +247,7 @@ func (th *TestHelper) SimulateKeystoneServiceReady(name types.NamespacedName) {
 
 // AssertKeystoneServiceDoesNotExist ensures the KeystoneService resource does not exist in a k8s cluster.
 func (th *TestHelper) AssertKeystoneServiceDoesNotExist(name types.NamespacedName) {
-	instance := &keystonev1.KeystoneService{}
+	instance := &keystonev1beta1.KeystoneService{}
 	gomega.Eventually(func(g gomega.Gomega) {
 		err := th.K8sClient.Get(th.Ctx, name, instance)
 		g.Expect(k8s_errors.IsNotFound(err)).To(gomega.BeTrue())
@@ -258,8 +259,8 @@ func (th *TestHelper) AssertKeystoneServiceDoesNotExist(name types.NamespacedNam
 // Example usage:
 //
 //	keystoneEndpointName := th.CreateKeystoneEndpoint(namespace)
-func (th *TestHelper) GetKeystoneEndpoint(name types.NamespacedName) *keystonev1.KeystoneEndpoint {
-	instance := &keystonev1.KeystoneEndpoint{}
+func (th *TestHelper) GetKeystoneEndpoint(name types.NamespacedName) *keystonev1beta1.KeystoneEndpoint {
+	instance := &keystonev1beta1.KeystoneEndpoint{}
 	gomega.Eventually(func(g gomega.Gomega) {
 		g.Expect(th.K8sClient.Get(th.Ctx, name, instance)).Should(gomega.Succeed())
 	}, th.Timeout, th.Interval).Should(gomega.Succeed())
@@ -278,7 +279,7 @@ func (th *TestHelper) SimulateKeystoneEndpointReady(name types.NamespacedName) {
 		endpoint := th.GetKeystoneEndpoint(name)
 
 		if endpoint.Status.Endpoints == nil {
-			endpoint.Status.Endpoints = []keystonev1.Endpoint{}
+			endpoint.Status.Endpoints = []keystonev1beta1.Endpoint{}
 		}
 		if endpoint.Status.EndpointIDs == nil {
 			endpoint.Status.EndpointIDs = map[string]string{}
@@ -291,7 +292,7 @@ func (th *TestHelper) SimulateKeystoneEndpointReady(name types.NamespacedName) {
 				endpoint.Status.EndpointIDs[endpointType] = uuid.New().String()
 			}
 
-			f := func(e keystonev1.Endpoint) bool {
+			f := func(e keystonev1beta1.Endpoint) bool {
 				return e.Interface == endpointType
 			}
 			idx := slices.IndexFunc(endpoint.Status.Endpoints, f)
@@ -300,7 +301,7 @@ func (th *TestHelper) SimulateKeystoneEndpointReady(name types.NamespacedName) {
 				endpoint.Status.Endpoints[idx].URL = endpointURL
 			} else {
 				endpoint.Status.Endpoints = append(endpoint.Status.Endpoints,
-					keystonev1.Endpoint{
+					keystonev1beta1.Endpoint{
 						Interface: endpointType,
 						URL:       endpointURL,
 						ID:        endpointID,
@@ -317,7 +318,7 @@ func (th *TestHelper) SimulateKeystoneEndpointReady(name types.NamespacedName) {
 
 // AssertKeystoneEndpointDoesNotExist ensures the KeystoneEndpoint resource does not exist in a k8s cluster.
 func (th *TestHelper) AssertKeystoneEndpointDoesNotExist(name types.NamespacedName) {
-	instance := &keystonev1.KeystoneEndpoint{}
+	instance := &keystonev1beta1.KeystoneEndpoint{}
 	gomega.Eventually(func(g gomega.Gomega) {
 		err := th.K8sClient.Get(th.Ctx, name, instance)
 		g.Expect(k8s_errors.IsNotFound(err)).To(gomega.BeTrue())
@@ -331,7 +332,7 @@ func (th *TestHelper) AssertKeystoneEndpointDoesNotExist(name types.NamespacedNa
 //	endpoint := th.CreateKeystoneEndpoint(endpointName)
 //	DeferCleanup(th.DeleteKeystoneEndpoint, endpoint)
 func (th *TestHelper) CreateKeystoneEndpoint(name types.NamespacedName) types.NamespacedName {
-	endpoint := &keystonev1.KeystoneEndpoint{
+	endpoint := &keystonev1beta1.KeystoneEndpoint{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "keystone.openstack.org/v1beta1",
 			Kind:       "KeystoneEndpoint",
@@ -343,7 +344,7 @@ func (th *TestHelper) CreateKeystoneEndpoint(name types.NamespacedName) types.Na
 				common.AppSelector: name.Name,
 			},
 		},
-		Spec: keystonev1.KeystoneEndpointSpec{
+		Spec: keystonev1beta1.KeystoneEndpointSpec{
 			ServiceName: name.Name,
 			Endpoints: map[string]string{
 				"internal": fmt.Sprintf("http://%s-internal", name.Name),
@@ -367,7 +368,7 @@ func (th *TestHelper) CreateKeystoneEndpoint(name types.NamespacedName) types.Na
 //	DeferCleanup(th.DeleteKeystoneEndpoint, endpoint)
 func (th *TestHelper) DeleteKeystoneEndpoint(name types.NamespacedName) {
 	gomega.Eventually(func(g gomega.Gomega) {
-		endpoint := &keystonev1.KeystoneEndpoint{}
+		endpoint := &keystonev1beta1.KeystoneEndpoint{}
 		err := th.K8sClient.Get(th.Ctx, name, endpoint)
 		// if it is already gone that is OK
 		if k8s_errors.IsNotFound(err) {
@@ -390,7 +391,7 @@ func (th *TestHelper) DeleteKeystoneEndpoint(name types.NamespacedName) {
 //	th.UpdateKeystoneEndpoint(endpointName, key, value)
 func (th *TestHelper) UpdateKeystoneEndpoint(name types.NamespacedName, key string, newValue string) {
 	gomega.Eventually(func(g gomega.Gomega) {
-		endpoint := &keystonev1.KeystoneEndpoint{}
+		endpoint := &keystonev1beta1.KeystoneEndpoint{}
 		err := th.K8sClient.Get(th.Ctx, name, endpoint)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -398,7 +399,7 @@ func (th *TestHelper) UpdateKeystoneEndpoint(name types.NamespacedName, key stri
 		g.Expect(th.K8sClient.Update(th.Ctx, endpoint)).Should(gomega.Succeed())
 
 		// update the endpoint status
-		f := func(e keystonev1.Endpoint) bool {
+		f := func(e keystonev1beta1.Endpoint) bool {
 			return e.Interface == key
 		}
 		idx := slices.IndexFunc(endpoint.Status.Endpoints, f)

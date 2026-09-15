@@ -27,7 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/applicationcredentials"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/keystone-operator/internal/keystone"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -81,7 +81,7 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 	logger := r.GetLogger(ctx)
 
 	// Fetch the ApplicationCredential CR
-	instance := &keystonev1.KeystoneApplicationCredential{}
+	instance := &keystonev1beta1.KeystoneApplicationCredential{}
 	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -131,8 +131,8 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 	// Conditions init
 	//
 	cl := condition.CreateList(
-		condition.UnknownCondition(keystonev1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1.KeystoneAPIReadyInitMessage),
-		condition.UnknownCondition(keystonev1.KeystoneApplicationCredentialReadyCondition, condition.InitReason, keystonev1.KeystoneApplicationCredentialReadyInitMessage),
+		condition.UnknownCondition(keystonev1beta1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1beta1.KeystoneAPIReadyInitMessage),
+		condition.UnknownCondition(keystonev1beta1.KeystoneApplicationCredentialReadyCondition, condition.InitReason, keystonev1beta1.KeystoneApplicationCredentialReadyInitMessage),
 		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
 	)
 	instance.Status.Conditions.Init(&cl)
@@ -147,7 +147,7 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 	//
 	// Validate that keystoneAPI is up
 	//
-	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, helperObj, instance.Namespace, nil)
+	keystoneAPI, err := keystonev1beta1.GetKeystoneAPI(ctx, helperObj, instance.Namespace, nil)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// If this KeystoneApplicationCredential CR is being deleted and it has not created
@@ -158,20 +158,20 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 			}
 
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneAPIReadyCondition,
+				keystonev1beta1.KeystoneAPIReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneAPIReadyNotFoundMessage,
+				keystonev1beta1.KeystoneAPIReadyNotFoundMessage,
 			))
 			logger.Info("KeystoneAPI not found!")
 
 			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneAPIReadyErrorMessage,
+			keystonev1beta1.KeystoneAPIReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -185,10 +185,10 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 
 	if !keystoneAPI.IsReady() {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.KeystoneAPIReadyWaitingMessage,
+			keystonev1beta1.KeystoneAPIReadyWaitingMessage,
 		))
 		logger.Info("KeystoneAPI not yet ready!")
 
@@ -196,8 +196,8 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	instance.Status.Conditions.MarkTrue(
-		keystonev1.KeystoneAPIReadyCondition,
-		keystonev1.KeystoneAPIReadyMessage,
+		keystonev1beta1.KeystoneAPIReadyCondition,
+		keystonev1beta1.KeystoneAPIReadyMessage,
 	)
 
 	return r.reconcileNormal(ctx, instance, helperObj, keystoneAPI)
@@ -205,9 +205,9 @@ func (r *ApplicationCredentialReconciler) Reconcile(ctx context.Context, req ctr
 
 func (r *ApplicationCredentialReconciler) reconcileNormal(
 	ctx context.Context,
-	instance *keystonev1.KeystoneApplicationCredential,
+	instance *keystonev1beta1.KeystoneApplicationCredential,
 	helperObj *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	logger := r.GetLogger(ctx)
 
@@ -240,7 +240,7 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		isRotation := instance.Status.ACID != ""
 
 		// Build a user-scoped client
-		userOS, userRes, userErr := keystonev1.GetUserServiceClient(
+		userOS, userRes, userErr := keystonev1beta1.GetUserServiceClient(
 			ctx, helperObj, keystoneAPI,
 			instance.Spec.UserName,
 			instance.Spec.Secret,
@@ -248,20 +248,20 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		)
 		if userErr != nil {
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneApplicationCredentialReadyCondition,
+				keystonev1beta1.KeystoneApplicationCredentialReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneApplicationCredentialReadyErrorMessage,
+				keystonev1beta1.KeystoneApplicationCredentialReadyErrorMessage,
 				userErr.Error(),
 			))
 			return userRes, userErr
 		}
 		if userRes != (ctrl.Result{}) {
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneApplicationCredentialReadyCondition,
+				keystonev1beta1.KeystoneApplicationCredentialReadyCondition,
 				condition.RequestedReason,
 				condition.SeverityInfo,
-				keystonev1.KeystoneApplicationCredentialWaitingMessage,
+				keystonev1beta1.KeystoneApplicationCredentialWaitingMessage,
 				instance.Spec.Secret,
 			))
 			return userRes, nil
@@ -272,10 +272,10 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		if err != nil {
 			logger.Error(err, "Could not get user ID from token")
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneApplicationCredentialReadyCondition,
+				keystonev1beta1.KeystoneApplicationCredentialReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneApplicationCredentialReadyErrorMessage,
+				keystonev1beta1.KeystoneApplicationCredentialReadyErrorMessage,
 				fmt.Sprintf("Failed to get user ID from token: %s", err.Error()),
 			))
 			return ctrl.Result{}, err
@@ -290,10 +290,10 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		if err != nil {
 			logger.Error(err, "Could not create ApplicationCredential in Keystone")
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneApplicationCredentialReadyCondition,
+				keystonev1beta1.KeystoneApplicationCredentialReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneApplicationCredentialReadyErrorMessage,
+				keystonev1beta1.KeystoneApplicationCredentialReadyErrorMessage,
 				fmt.Sprintf("Failed to create ApplicationCredential: %s", err.Error()),
 			))
 			return ctrl.Result{}, err
@@ -310,10 +310,10 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 				logger.Info("Revoked orphaned Keystone AC after secret creation failure", "ACID", newID)
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneApplicationCredentialReadyCondition,
+				keystonev1beta1.KeystoneApplicationCredentialReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneApplicationCredentialReadyErrorMessage,
+				keystonev1beta1.KeystoneApplicationCredentialReadyErrorMessage,
 				fmt.Sprintf("Failed to create AC secret: %s", err.Error()),
 			))
 			return ctrl.Result{}, err
@@ -347,7 +347,7 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		}
 		instance.Status.SecurityHash = securityHash
 
-		instance.Status.Conditions.MarkTrue(keystonev1.KeystoneApplicationCredentialReadyCondition, keystonev1.KeystoneApplicationCredentialReadyMessage)
+		instance.Status.Conditions.MarkTrue(keystonev1beta1.KeystoneApplicationCredentialReadyCondition, keystonev1beta1.KeystoneApplicationCredentialReadyMessage)
 
 		// Set LastRotated and emit event if this was a rotation
 		if isRotation {
@@ -379,7 +379,7 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 
 	// Migrate old mutable secrets: add the application-credential-service label
 	// if missing, so they become visible to label-based cleanup and deletion queries
-	serviceName := keystonev1.GetServiceNameFromACCR(instance.Name)
+	serviceName := keystonev1beta1.GetServiceNameFromACCR(instance.Name)
 	for _, sn := range []string{instance.Status.SecretName, instance.Status.PreviousSecretName} {
 		if sn != "" {
 			if err := r.ensureServiceLabel(ctx, helperObj, sn, instance.Namespace, serviceName); err != nil {
@@ -399,7 +399,7 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 	// Unused rotated AC secrets (not current/previous, no consumer finalizer), best effort
 	// Failures are logged but do not block the AC CR from reaching Ready, since the current credentials
 	// are valid regardless. Cleanup will be retried on the next reconcile.
-	userOS, userRes, userErr := keystonev1.GetUserServiceClient(
+	userOS, userRes, userErr := keystonev1beta1.GetUserServiceClient(
 		ctx, helperObj, keystoneAPI,
 		instance.Spec.UserName,
 		instance.Spec.Secret,
@@ -420,7 +420,7 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 		}
 	}
 
-	instance.Status.Conditions.MarkTrue(keystonev1.KeystoneApplicationCredentialReadyCondition, keystonev1.KeystoneApplicationCredentialReadyMessage)
+	instance.Status.Conditions.MarkTrue(keystonev1beta1.KeystoneApplicationCredentialReadyCondition, keystonev1beta1.KeystoneApplicationCredentialReadyMessage)
 	return ctrl.Result{}, nil
 }
 
@@ -428,14 +428,14 @@ func (r *ApplicationCredentialReconciler) reconcileNormal(
 // Best-effort: try to revoke Keystone ACs, then remove all protection finalizers
 func (r *ApplicationCredentialReconciler) reconcileDelete(
 	ctx context.Context,
-	instance *keystonev1.KeystoneApplicationCredential,
+	instance *keystonev1beta1.KeystoneApplicationCredential,
 	helperObj *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	logger := r.GetLogger(ctx)
 	logger.Info("Reconciling ApplicationCredential delete")
 
-	serviceName := keystonev1.GetServiceNameFromACCR(instance.Name)
+	serviceName := keystonev1beta1.GetServiceNameFromACCR(instance.Name)
 
 	// For EDPM-aware ACs, defer deletion until all NodeSet hashes are in sync.
 	// This prevents revoking AC credentials that EDPM nodes may still use
@@ -476,7 +476,7 @@ func (r *ApplicationCredentialReconciler) reconcileDelete(
 	var identClient *gophercloud.ServiceClient
 	var userID string
 	if keystoneAPI != nil {
-		userOS, userRes, userErr := keystonev1.GetUserServiceClient(
+		userOS, userRes, userErr := keystonev1beta1.GetUserServiceClient(
 			ctx, helperObj, keystoneAPI,
 			instance.Spec.UserName,
 			instance.Spec.Secret,
@@ -502,7 +502,7 @@ func (r *ApplicationCredentialReconciler) reconcileDelete(
 		processed[s.Name] = true
 
 		if identClient != nil {
-			acID := string(s.Data[keystonev1.ACIDSecretKey])
+			acID := string(s.Data[keystonev1beta1.ACIDSecretKey])
 			if acID != "" && !seen[acID] {
 				seen[acID] = true
 				if err := revokeKeystoneAC(ctx, identClient, userID, acID); err != nil {
@@ -603,13 +603,13 @@ func hasConsumerFinalizer(secret *corev1.Secret) bool {
 // For each: revoke its AC in Keystone, remove the protection finalizer, delete the K8s Secret
 func (r *ApplicationCredentialReconciler) cleanupUnusedRotatedSecrets(
 	ctx context.Context,
-	instance *keystonev1.KeystoneApplicationCredential,
+	instance *keystonev1beta1.KeystoneApplicationCredential,
 	helperObj *helper.Helper,
 	identClient *gophercloud.ServiceClient,
 	userID string,
 ) error {
 	logger := r.GetLogger(ctx)
-	serviceName := keystonev1.GetServiceNameFromACCR(instance.Name)
+	serviceName := keystonev1beta1.GetServiceNameFromACCR(instance.Name)
 
 	// For EDPM-aware ACs, block revocation while any NodeSet has not yet been
 	// redeployed with the current config secrets. Controlplane-only ACs skip
@@ -642,7 +642,7 @@ func (r *ApplicationCredentialReconciler) cleanupUnusedRotatedSecrets(
 			continue
 		}
 
-		acID := string(s.Data[keystonev1.ACIDSecretKey])
+		acID := string(s.Data[keystonev1beta1.ACIDSecretKey])
 		if acID != "" && identClient != nil {
 			if err := revokeKeystoneAC(ctx, identClient, userID, acID); err != nil {
 				return err
@@ -669,7 +669,7 @@ func (r *ApplicationCredentialReconciler) createACWithName(
 	ctx context.Context,
 	identClient *gophercloud.ServiceClient,
 	userID string,
-	ac *keystonev1.KeystoneApplicationCredential,
+	ac *keystonev1beta1.KeystoneApplicationCredential,
 	newACName string,
 ) (string, string, time.Time, error) {
 	logger := r.GetLogger(ctx)
@@ -738,12 +738,12 @@ func acSecretName(serviceName, acID string) string {
 func (r *ApplicationCredentialReconciler) createImmutableACSecret(
 	ctx context.Context,
 	helperObj *helper.Helper,
-	ac *keystonev1.KeystoneApplicationCredential,
+	ac *keystonev1beta1.KeystoneApplicationCredential,
 	newID, newSecret string,
 ) (string, error) {
 	logger := r.GetLogger(ctx)
 
-	serviceName := keystonev1.GetServiceNameFromACCR(ac.Name)
+	serviceName := keystonev1beta1.GetServiceNameFromACCR(ac.Name)
 	secretName := acSecretName(serviceName, newID)
 	immutable := true
 
@@ -759,8 +759,8 @@ func (r *ApplicationCredentialReconciler) createImmutableACSecret(
 		},
 		Immutable: &immutable,
 		Data: map[string][]byte{
-			keystonev1.ACIDSecretKey:     []byte(newID),
-			keystonev1.ACSecretSecretKey: []byte(newSecret),
+			keystonev1beta1.ACIDSecretKey:     []byte(newID),
+			keystonev1beta1.ACSecretSecretKey: []byte(newSecret),
 		},
 	}
 	if err := controllerutil.SetControllerReference(ac, secret, helperObj.GetScheme()); err != nil {
@@ -778,7 +778,7 @@ func (r *ApplicationCredentialReconciler) createImmutableACSecret(
 			if getErr != nil {
 				return "", fmt.Errorf("AC secret %s already exists but failed to fetch for validation: %w", secretName, getErr)
 			}
-			existingACID := string(existing.Data[keystonev1.ACIDSecretKey])
+			existingACID := string(existing.Data[keystonev1beta1.ACIDSecretKey])
 			if existingACID != newID {
 				return "", fmt.Errorf("%w: secret=%s existingACID=%s expectedACID=%s", errACIDMismatch, secretName, existingACID, newID)
 			}
@@ -810,7 +810,7 @@ func (r *ApplicationCredentialReconciler) getUserIDFromToken(ctx context.Context
 // needsRotation determines if an ApplicationCredential needs rotation.
 // It checks if the ApplicationCredential exists, if security-critical fields changed,
 // and if it's within the grace period before expiration.
-func needsRotation(ac *keystonev1.KeystoneApplicationCredential) (bool, string, error) {
+func needsRotation(ac *keystonev1beta1.KeystoneApplicationCredential) (bool, string, error) {
 	if ac.Status.ACID == "" {
 		return true, "ApplicationCredential does not exist, creating", nil
 	}
@@ -839,7 +839,7 @@ func needsRotation(ac *keystonev1.KeystoneApplicationCredential) (bool, string, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationCredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
-		For(&keystonev1.KeystoneApplicationCredential{}).
+		For(&keystonev1beta1.KeystoneApplicationCredential{}).
 		// Suppress Create events on owned secrets to prevent a race condition:
 		// when a reconcile creates a new immutable secret, the Owns() watch would
 		// immediately enqueue another reconcile. That second reconcile could read
@@ -872,7 +872,7 @@ func (r *ApplicationCredentialReconciler) nodesetToACMapFunc(
 ) []reconcile.Request {
 	logger := r.GetLogger(ctx)
 
-	acList := &keystonev1.KeystoneApplicationCredentialList{}
+	acList := &keystonev1beta1.KeystoneApplicationCredentialList{}
 	if err := r.List(ctx, acList, client.InNamespace(obj.GetNamespace())); err != nil {
 		logger.Error(err, "Failed to list KeystoneApplicationCredential CRs for NodeSet watch")
 		return nil

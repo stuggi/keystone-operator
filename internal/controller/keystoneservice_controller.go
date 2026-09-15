@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
@@ -78,7 +78,7 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	log := r.GetLogger(ctx)
 
 	// Fetch the KeystoneService instance
-	instance := &keystonev1.KeystoneService{}
+	instance := &keystonev1beta1.KeystoneService{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -135,10 +135,10 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if instance.Status.Conditions == nil {
 		instance.Status.Conditions = condition.Conditions{}
 		cl := condition.CreateList(
-			condition.UnknownCondition(keystonev1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1.KeystoneAPIReadyInitMessage),
-			condition.UnknownCondition(keystonev1.AdminServiceClientReadyCondition, condition.InitReason, keystonev1.AdminServiceClientReadyInitMessage),
-			condition.UnknownCondition(keystonev1.KeystoneServiceOSServiceReadyCondition, condition.InitReason, keystonev1.KeystoneServiceOSServiceReadyInitMessage),
-			condition.UnknownCondition(keystonev1.KeystoneServiceOSUserReadyCondition, condition.InitReason, keystonev1.KeystoneServiceOSUserReadyInitMessage))
+			condition.UnknownCondition(keystonev1beta1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1beta1.KeystoneAPIReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.AdminServiceClientReadyCondition, condition.InitReason, keystonev1beta1.AdminServiceClientReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.KeystoneServiceOSServiceReadyCondition, condition.InitReason, keystonev1beta1.KeystoneServiceOSServiceReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.KeystoneServiceOSUserReadyCondition, condition.InitReason, keystonev1beta1.KeystoneServiceOSUserReadyInitMessage))
 		instance.Status.Conditions.Init(&cl)
 
 		// Register overall status immediately to have an early feedback e.g. in the cli
@@ -153,7 +153,7 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	//
 	// Validate that keystoneAPI is up
 	//
-	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, helper, instance.Namespace, map[string]string{})
+	keystoneAPI, err := keystonev1beta1.GetKeystoneAPI(ctx, helper, instance.Namespace, map[string]string{})
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// If this KeystoneService CR is being deleted and it has not registered any actual
@@ -165,19 +165,19 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneAPIReadyCondition,
+				keystonev1beta1.KeystoneAPIReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneAPIReadyNotFoundMessage,
+				keystonev1beta1.KeystoneAPIReadyNotFoundMessage,
 			))
 			log.Info("KeystoneAPI not found!")
 			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneAPIReadyErrorMessage,
+			keystonev1beta1.KeystoneAPIReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -202,41 +202,41 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if !keystoneAPI.IsReady() {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.KeystoneAPIReadyWaitingMessage))
+			keystonev1beta1.KeystoneAPIReadyWaitingMessage))
 		log.Info("KeystoneAPI not yet ready")
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
-	instance.Status.Conditions.MarkTrue(keystonev1.KeystoneAPIReadyCondition, keystonev1.KeystoneAPIReadyMessage)
+	instance.Status.Conditions.MarkTrue(keystonev1beta1.KeystoneAPIReadyCondition, keystonev1beta1.KeystoneAPIReadyMessage)
 
 	//
 	// get admin authentication OpenStack
 	//
-	os, ctrlResult, err := keystonev1.GetAdminServiceClient(
+	os, ctrlResult, err := keystonev1beta1.GetAdminServiceClient(
 		ctx,
 		helper,
 		keystoneAPI,
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.AdminServiceClientReadyCondition,
+			keystonev1beta1.AdminServiceClientReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.AdminServiceClientReadyErrorMessage,
+			keystonev1beta1.AdminServiceClientReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.AdminServiceClientReadyCondition,
+			keystonev1beta1.AdminServiceClientReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.AdminServiceClientReadyWaitingMessage))
+			keystonev1beta1.AdminServiceClientReadyWaitingMessage))
 		return ctrlResult, nil
 	}
-	instance.Status.Conditions.MarkTrue(keystonev1.AdminServiceClientReadyCondition, keystonev1.AdminServiceClientReadyMessage)
+	instance.Status.Conditions.MarkTrue(keystonev1beta1.AdminServiceClientReadyCondition, keystonev1beta1.AdminServiceClientReadyMessage)
 
 	// Handle normal service delete
 	if !instance.DeletionTimestamp.IsZero() {
@@ -251,16 +251,16 @@ func (r *KeystoneServiceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager x
 func (r *KeystoneServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&keystonev1.KeystoneService{}).
+		For(&keystonev1beta1.KeystoneService{}).
 		Complete(r)
 }
 
 func (r *KeystoneServiceReconciler) reconcileDelete(
 	ctx context.Context,
-	instance *keystonev1.KeystoneService,
+	instance *keystonev1beta1.KeystoneService,
 	helper *helper.Helper,
 	os *openstack.OpenStack,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	log := r.GetLogger(ctx)
 	log.Info("Reconciling Service delete")
@@ -318,9 +318,9 @@ func (r *KeystoneServiceReconciler) reconcileDelete(
 
 func (r *KeystoneServiceReconciler) reconcileDeleteFinalizersOnly(
 	ctx context.Context,
-	instance *keystonev1.KeystoneService,
+	instance *keystonev1beta1.KeystoneService,
 	helper *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info("Reconciling Service delete while KeystoneAPI is being deleted")
@@ -341,10 +341,10 @@ func (r *KeystoneServiceReconciler) reconcileDeleteFinalizersOnly(
 
 func (r *KeystoneServiceReconciler) reconcileNormal(
 	ctx context.Context,
-	instance *keystonev1.KeystoneService,
+	instance *keystonev1beta1.KeystoneService,
 	helper *helper.Helper,
 	os *openstack.OpenStack,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	log := r.GetLogger(ctx)
 	log.Info("Reconciling Service")
@@ -369,16 +369,16 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 	err := r.reconcileService(ctx, instance, os)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneServiceOSServiceReadyCondition,
+			keystonev1beta1.KeystoneServiceOSServiceReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneServiceOSServiceReadyErrorMessage,
+			keystonev1beta1.KeystoneServiceOSServiceReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
 	instance.Status.Conditions.MarkTrue(
-		keystonev1.KeystoneServiceOSServiceReadyCondition,
-		keystonev1.KeystoneServiceOSServiceReadyMessage,
+		keystonev1beta1.KeystoneServiceOSServiceReadyCondition,
+		keystonev1beta1.KeystoneServiceOSServiceReadyMessage,
 		instance.Spec.ServiceName,
 		instance.Status.ServiceID,
 	)
@@ -393,23 +393,23 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 		os)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneServiceOSUserReadyCondition,
+			keystonev1beta1.KeystoneServiceOSUserReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneServiceOSUserReadyErrorMessage,
+			keystonev1beta1.KeystoneServiceOSUserReadyErrorMessage,
 			err.Error()))
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneServiceOSUserReadyCondition,
+			keystonev1beta1.KeystoneServiceOSUserReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.KeystoneServiceOSUserReadyWaitingMessage))
+			keystonev1beta1.KeystoneServiceOSUserReadyWaitingMessage))
 		return ctrlResult, nil
 	}
 	instance.Status.Conditions.MarkTrue(
-		keystonev1.KeystoneServiceOSUserReadyCondition,
-		keystonev1.KeystoneServiceOSUserReadyMessage,
+		keystonev1beta1.KeystoneServiceOSUserReadyCondition,
+		keystonev1beta1.KeystoneServiceOSUserReadyMessage,
 		instance.Spec.ServiceUser,
 	)
 
@@ -419,7 +419,7 @@ func (r *KeystoneServiceReconciler) reconcileNormal(
 
 func (r *KeystoneServiceReconciler) reconcileService(
 	ctx context.Context,
-	instance *keystonev1.KeystoneService,
+	instance *keystonev1beta1.KeystoneService,
 	os *openstack.OpenStack,
 ) error {
 	log := r.GetLogger(ctx)
@@ -484,7 +484,7 @@ func (r *KeystoneServiceReconciler) reconcileService(
 func (r *KeystoneServiceReconciler) reconcileUser(
 	ctx context.Context,
 	h *helper.Helper,
-	instance *keystonev1.KeystoneService,
+	instance *keystonev1beta1.KeystoneService,
 	os *openstack.OpenStack,
 ) (reconcile.Result, error) {
 	log := r.GetLogger(ctx)

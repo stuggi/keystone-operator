@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 )
@@ -86,7 +86,7 @@ var _ = Describe("KeystoneAPI Webhook", func() {
 		It("should have the defaults initialized by webhook", func() {
 			KeystoneAPI := GetKeystoneAPI(keystoneAPIName)
 			Expect(KeystoneAPI.Spec.ContainerImage).Should(Equal(
-				keystonev1.KeystoneAPIContainerImage,
+				keystonev1beta1.KeystoneAPIContainerImage,
 			))
 		})
 	})

@@ -39,8 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/openstack-k8s-operators/keystone-operator/internal/controller"
-	webhookv1beta1 "github.com/openstack-k8s-operators/keystone-operator/internal/webhook/v1beta1"
+	webhookv1beta2 "github.com/openstack-k8s-operators/keystone-operator/internal/webhook/v1beta2"
 
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 	// +kubebuilder:scaffold:imports
 	"context"
 
@@ -48,11 +49,12 @@ import (
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
 	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/operator"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 )
 
 var (
@@ -62,12 +64,13 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(keystonev1.AddToScheme(scheme))
+	utilruntime.Must(keystonev1beta1.AddToScheme(scheme))
 	utilruntime.Must(mariadbv1.AddToScheme(scheme))
 	utilruntime.Must(rabbitmqv1.AddToScheme(scheme))
 	utilruntime.Must(memcachedv1.AddToScheme(scheme))
 	utilruntime.Must(networkv1.AddToScheme(scheme))
 	utilruntime.Must(topologyv1.AddToScheme(scheme))
+	utilruntime.Must(keystonev1beta2.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -249,8 +252,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup webhook defaults
-	keystonev1.SetupDefaults()
+	// Setup webhook defaults for the latest API version
+	keystonev1beta2.SetupDefaults()
 
 	if err := (&controller.KeystoneAPIReconciler{
 		Client:  mgr.GetClient(),
@@ -289,7 +292,7 @@ func main() {
 	// nolint:goconst
 	checker := healthz.Ping
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err := webhookv1beta1.SetupKeystoneAPIWebhookWithManager(mgr); err != nil {
+		if err := webhookv1beta2.SetupKeystoneAPIWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "KeystoneAPI")
 			os.Exit(1)
 		}

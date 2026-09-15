@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	keystone_base "github.com/openstack-k8s-operators/keystone-operator/internal/keystone"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 )
@@ -81,8 +81,8 @@ func CreateKeystoneAPI(name types.NamespacedName, spec map[string]any) client.Ob
 	return th.CreateUnstructured(raw)
 }
 
-func GetKeystoneAPI(name types.NamespacedName) *keystonev1.KeystoneAPI {
-	instance := &keystonev1.KeystoneAPI{}
+func GetKeystoneAPI(name types.NamespacedName) *keystonev1beta1.KeystoneAPI {
+	instance := &keystonev1beta1.KeystoneAPI{}
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
 	}, timeout, interval).Should(Succeed())
@@ -269,8 +269,8 @@ func CreateProtectedACSecret(name types.NamespacedName, serviceName string) *cor
 		},
 		Immutable: &immutable,
 		Data: map[string][]byte{
-			keystonev1.ACIDSecretKey:     []byte("fake-ac-id"),
-			keystonev1.ACSecretSecretKey: []byte("fake-ac-secret"),
+			keystonev1beta1.ACIDSecretKey:     []byte("fake-ac-id"),
+			keystonev1beta1.ACSecretSecretKey: []byte("fake-ac-secret"),
 		},
 	}
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
@@ -291,8 +291,8 @@ func CreateOldStyleACSecret(name types.NamespacedName, acID string) *corev1.Secr
 			Finalizers: []string{ACSecretProtectionFinalizer},
 		},
 		Data: map[string][]byte{
-			keystonev1.ACIDSecretKey:     []byte(acID),
-			keystonev1.ACSecretSecretKey: []byte("fake-ac-secret"),
+			keystonev1beta1.ACIDSecretKey:     []byte(acID),
+			keystonev1beta1.ACSecretSecretKey: []byte("fake-ac-secret"),
 		},
 	}
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
@@ -316,13 +316,13 @@ func DeleteACCR(name types.NamespacedName) {
 // WaitForACGone blocks until the AC CR is fully removed from the API server
 func WaitForACGone(name types.NamespacedName) {
 	Eventually(func(g Gomega) {
-		err := k8sClient.Get(ctx, name, &keystonev1.KeystoneApplicationCredential{})
+		err := k8sClient.Get(ctx, name, &keystonev1beta1.KeystoneApplicationCredential{})
 		g.Expect(k8s_errors.IsNotFound(err)).To(BeTrue())
 	}, timeout, interval).Should(Succeed())
 }
 
-func GetApplicationCredential(name types.NamespacedName) *keystonev1.KeystoneApplicationCredential {
-	instance := &keystonev1.KeystoneApplicationCredential{}
+func GetApplicationCredential(name types.NamespacedName) *keystonev1beta1.KeystoneApplicationCredential {
+	instance := &keystonev1beta1.KeystoneApplicationCredential{}
 	Eventually(func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
 	}, timeout, interval).Should(Succeed())

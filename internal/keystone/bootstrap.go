@@ -18,7 +18,7 @@ package keystone
 
 import (
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
@@ -37,7 +37,7 @@ const (
 
 // BootstrapJob func
 func BootstrapJob(
-	instance *keystonev1.KeystoneAPI,
+	instance *keystonev1beta2.KeystoneAPI,
 	labels map[string]string,
 	annotations map[string]string,
 	endpoints map[string]string,
@@ -63,7 +63,7 @@ func BootstrapJob(
 	}
 
 	// create Volume and VolumeMounts
-	bootstrapExtraMounts := []keystonev1.KeystoneExtraMounts{}
+	bootstrapExtraMounts := []keystonev1beta2.KeystoneExtraMounts{}
 	volumes := getVolumes(instance, bootstrapExtraMounts, BootstrapPropagation)
 	volumeMounts := getBootstrapVolumeMounts()
 

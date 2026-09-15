@@ -32,10 +32,11 @@ import (
 	infra_test "github.com/openstack-k8s-operators/infra-operator/apis/test/helpers"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	keystone_test "github.com/openstack-k8s-operators/keystone-operator/api/test/helpers"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 	"github.com/openstack-k8s-operators/keystone-operator/internal/controller"
 	keystone_base "github.com/openstack-k8s-operators/keystone-operator/internal/keystone"
-	webhookv1beta1 "github.com/openstack-k8s-operators/keystone-operator/internal/webhook/v1beta1"
+	webhookv1beta2 "github.com/openstack-k8s-operators/keystone-operator/internal/webhook/v1beta2"
 	common_test "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 	test "github.com/openstack-k8s-operators/lib-common/modules/test"
 	mariadb_test "github.com/openstack-k8s-operators/mariadb-operator/api/test/helpers"
@@ -138,12 +139,14 @@ var _ = BeforeSuite(func() {
 
 	logger = ctrl.Log.WithName("---Test---")
 
-	// cfg is defined in this file globally.
-	cfg, err = testEnv.Start()
+	// Register schemes before starting envtest: envtest wires up the CRD
+	// conversion webhook (clientConfig -> local serving webhook) only for CRDs
+	// whose types are registered as convertible (Hub/Spoke) in the scheme at
+	// Start time. Both KeystoneAPI versions must be registered up front for the
+	// conversion webhook to be installed on the keystoneapis CRD.
+	err = keystonev1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
-
-	err = keystonev1.AddToScheme(scheme.Scheme)
+	err = keystonev1beta2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = apiextv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -157,6 +160,11 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
+
+	// cfg is defined in this file globally.
+	cfg, err = testEnv.Start()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(cfg).NotTo(BeNil())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -190,10 +198,10 @@ var _ = BeforeSuite(func() {
 	kclient, err := kubernetes.NewForConfig(cfg)
 	Expect(err).ToNot(HaveOccurred(), "failed to create kclient")
 
-	// Setup webhook defaults
-	keystonev1.SetupDefaults()
+	// Setup webhook defaults for the latest API version
+	keystonev1beta2.SetupDefaults()
 
-	err = webhookv1beta1.SetupKeystoneAPIWebhookWithManager(k8sManager)
+	err = webhookv1beta2.SetupKeystoneAPIWebhookWithManager(k8sManager)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&controller.KeystoneAPIReconciler{

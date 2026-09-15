@@ -20,7 +20,7 @@ import (
 
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta2 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta2"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
@@ -39,7 +39,7 @@ import (
 
 // Deployment func
 func Deployment(
-	instance *keystonev1.KeystoneAPI,
+	instance *keystonev1beta2.KeystoneAPI,
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,

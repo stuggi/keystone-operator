@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	helper "github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	util "github.com/openstack-k8s-operators/lib-common/modules/common/util"
@@ -64,7 +64,7 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	Log := r.GetLogger(ctx)
 
 	// Fetch the KeystoneEndpoint instance
-	instance := &keystonev1.KeystoneEndpoint{}
+	instance := &keystonev1beta1.KeystoneEndpoint{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -121,9 +121,9 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if instance.Status.Conditions == nil {
 		instance.Status.Conditions = condition.Conditions{}
 		cl := condition.CreateList(
-			condition.UnknownCondition(keystonev1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1.KeystoneAPIReadyInitMessage),
-			condition.UnknownCondition(keystonev1.AdminServiceClientReadyCondition, condition.InitReason, keystonev1.AdminServiceClientReadyInitMessage),
-			condition.UnknownCondition(keystonev1.KeystoneServiceOSEndpointsReadyCondition, condition.InitReason, keystonev1.KeystoneServiceOSEndpointsReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.KeystoneAPIReadyCondition, condition.InitReason, keystonev1beta1.KeystoneAPIReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.AdminServiceClientReadyCondition, condition.InitReason, keystonev1beta1.AdminServiceClientReadyInitMessage),
+			condition.UnknownCondition(keystonev1beta1.KeystoneServiceOSEndpointsReadyCondition, condition.InitReason, keystonev1beta1.KeystoneServiceOSEndpointsReadyInitMessage),
 			// right now we have no dedicated KeystoneServiceReadyInitMessage
 			condition.UnknownCondition(condition.KeystoneServiceReadyCondition, condition.InitReason, ""),
 		)
@@ -137,7 +137,7 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		instance.Status.EndpointIDs = map[string]string{}
 	}
 	if instance.Status.Endpoints == nil {
-		instance.Status.Endpoints = []keystonev1.Endpoint{}
+		instance.Status.Endpoints = []keystonev1beta1.Endpoint{}
 	}
 
 	instance.Status.ObservedGeneration = instance.Generation
@@ -150,7 +150,7 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	//
 	// Validate that keystoneAPI is up
 	//
-	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, helper, instance.Namespace, map[string]string{})
+	keystoneAPI, err := keystonev1beta1.GetKeystoneAPI(ctx, helper, instance.Namespace, map[string]string{})
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// If this KeystoneEndpoint CR is being deleted and it has not registered any actual
@@ -162,20 +162,20 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			instance.Status.Conditions.Set(condition.FalseCondition(
-				keystonev1.KeystoneAPIReadyCondition,
+				keystonev1beta1.KeystoneAPIReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
-				keystonev1.KeystoneAPIReadyNotFoundMessage,
+				keystonev1beta1.KeystoneAPIReadyNotFoundMessage,
 			))
 			Log.Info("KeystoneAPI not found!")
 
 			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneAPIReadyErrorMessage,
+			keystonev1beta1.KeystoneAPIReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -200,42 +200,42 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if !keystoneAPI.IsReady() {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneAPIReadyCondition,
+			keystonev1beta1.KeystoneAPIReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.KeystoneAPIReadyWaitingMessage))
+			keystonev1beta1.KeystoneAPIReadyWaitingMessage))
 		Log.Info("KeystoneAPI not yet ready!")
 
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
-	instance.Status.Conditions.MarkTrue(keystonev1.KeystoneAPIReadyCondition, keystonev1.KeystoneAPIReadyMessage)
+	instance.Status.Conditions.MarkTrue(keystonev1beta1.KeystoneAPIReadyCondition, keystonev1beta1.KeystoneAPIReadyMessage)
 
 	//
 	// get admin authentication OpenStack
 	//
-	os, ctrlResult, err := keystonev1.GetAdminServiceClient(
+	os, ctrlResult, err := keystonev1beta1.GetAdminServiceClient(
 		ctx,
 		helper,
 		keystoneAPI,
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.AdminServiceClientReadyCondition,
+			keystonev1beta1.AdminServiceClientReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.AdminServiceClientReadyErrorMessage,
+			keystonev1beta1.AdminServiceClientReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.AdminServiceClientReadyCondition,
+			keystonev1beta1.AdminServiceClientReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			keystonev1.AdminServiceClientReadyWaitingMessage))
+			keystonev1beta1.AdminServiceClientReadyWaitingMessage))
 		return ctrlResult, nil
 	}
-	instance.Status.Conditions.MarkTrue(keystonev1.AdminServiceClientReadyCondition, keystonev1.AdminServiceClientReadyMessage)
+	instance.Status.Conditions.MarkTrue(keystonev1beta1.AdminServiceClientReadyCondition, keystonev1beta1.AdminServiceClientReadyMessage)
 
 	// Handle normal endpoint delete
 	if !instance.DeletionTimestamp.IsZero() {
@@ -249,16 +249,16 @@ func (r *KeystoneEndpointReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager.
 func (r *KeystoneEndpointReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&keystonev1.KeystoneEndpoint{}).
+		For(&keystonev1beta1.KeystoneEndpoint{}).
 		Complete(r)
 }
 
 func (r *KeystoneEndpointReconciler) reconcileDelete(
 	ctx context.Context,
-	instance *keystonev1.KeystoneEndpoint,
+	instance *keystonev1beta1.KeystoneEndpoint,
 	helper *helper.Helper,
 	os *openstack.OpenStack,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
@@ -293,7 +293,7 @@ func (r *KeystoneEndpointReconciler) reconcileDelete(
 	// Remove endpoints from status
 	instance.Status.EndpointIDs = map[string]string{}
 
-	ksSvc, err := keystonev1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
+	ksSvc, err := keystonev1beta1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
 	if err == nil {
 		// Remove the finalizer for this endpoint from the Service
 		if controllerutil.RemoveFinalizer(ksSvc, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
@@ -328,14 +328,14 @@ func (r *KeystoneEndpointReconciler) reconcileDelete(
 
 func (r *KeystoneEndpointReconciler) reconcileDeleteFinalizersOnly(
 	ctx context.Context,
-	instance *keystonev1.KeystoneEndpoint,
+	instance *keystonev1beta1.KeystoneEndpoint,
 	helper *helper.Helper,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info("Reconciling Endpoint delete while KeystoneAPI is being deleted")
 
-	ksSvc, err := keystonev1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
+	ksSvc, err := keystonev1beta1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
 	if err == nil {
 		// Remove the finalizer for this endpoint from the Service
 		if controllerutil.RemoveFinalizer(ksSvc, fmt.Sprintf("%s-%s", helper.GetFinalizer(), instance.Name)) {
@@ -365,10 +365,10 @@ func (r *KeystoneEndpointReconciler) reconcileDeleteFinalizersOnly(
 
 func (r *KeystoneEndpointReconciler) reconcileNormal(
 	ctx context.Context,
-	instance *keystonev1.KeystoneEndpoint,
+	instance *keystonev1beta1.KeystoneEndpoint,
 	helper *helper.Helper,
 	os *openstack.OpenStack,
-	keystoneAPI *keystonev1.KeystoneAPI,
+	keystoneAPI *keystonev1beta1.KeystoneAPI,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info("Reconciling Endpoint normal")
@@ -376,7 +376,7 @@ func (r *KeystoneEndpointReconciler) reconcileNormal(
 	//
 	// Wait for KeystoneService is Ready and get the ServiceID from the object
 	//
-	ksSvc, err := keystonev1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
+	ksSvc, err := keystonev1beta1.GetKeystoneServiceWithName(ctx, helper, instance.Spec.ServiceName, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			Log.Info("KeystoneService not found", "KeystoneService", instance.Spec.ServiceName)
@@ -435,10 +435,10 @@ func (r *KeystoneEndpointReconciler) reconcileNormal(
 		os)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			keystonev1.KeystoneServiceOSEndpointsReadyCondition,
+			keystonev1beta1.KeystoneServiceOSEndpointsReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			keystonev1.KeystoneServiceOSEndpointsReadyErrorMessage,
+			keystonev1beta1.KeystoneServiceOSEndpointsReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -448,8 +448,8 @@ func (r *KeystoneEndpointReconciler) reconcileNormal(
 		endpointStrs = append(endpointStrs, k+":"+instance.Spec.Endpoints[k])
 	}
 	instance.Status.Conditions.MarkTrue(
-		keystonev1.KeystoneServiceOSEndpointsReadyCondition,
-		keystonev1.KeystoneServiceOSEndpointsReadyMessage,
+		keystonev1beta1.KeystoneServiceOSEndpointsReadyCondition,
+		keystonev1beta1.KeystoneServiceOSEndpointsReadyMessage,
 		endpointStrs,
 	)
 
@@ -460,7 +460,7 @@ func (r *KeystoneEndpointReconciler) reconcileNormal(
 
 func (r *KeystoneEndpointReconciler) reconcileEndpoints(
 	ctx context.Context,
-	instance *keystonev1.KeystoneEndpoint,
+	instance *keystonev1beta1.KeystoneEndpoint,
 	os *openstack.OpenStack,
 ) error {
 	Log := r.GetLogger(ctx)
@@ -577,7 +577,7 @@ func (r *KeystoneEndpointReconciler) reconcileEndpoints(
 				instance.Status.Endpoints[idx].URL = endpointURL
 			} else {
 				instance.Status.Endpoints = append(instance.Status.Endpoints,
-					keystonev1.Endpoint{
+					keystonev1beta1.Endpoint{
 						Interface: endpointType,
 						URL:       endpointURL,
 						ID:        endpointID,
@@ -593,9 +593,9 @@ func (r *KeystoneEndpointReconciler) reconcileEndpoints(
 
 // getEndpointIdx - returns the index of the endpointType from a list of Endpoints
 // if not found -1 is returnd
-func getEndpointIdx(endpointType string, endpoints []keystonev1.Endpoint) int {
+func getEndpointIdx(endpointType string, endpoints []keystonev1beta1.Endpoint) int {
 	// validate if endpoint is already in the endpoint status list
-	f := func(e keystonev1.Endpoint) bool {
+	f := func(e keystonev1beta1.Endpoint) bool {
 		return e.Interface == endpointType
 	}
 	idx := slices.IndexFunc(endpoints, f)

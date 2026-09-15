@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	oko_secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	edpm "github.com/openstack-k8s-operators/lib-common/modules/edpm/unstructured"
@@ -28,7 +28,7 @@ import (
 func newTestScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(s))
-	utilruntime.Must(keystonev1.AddToScheme(s))
+	utilruntime.Must(keystonev1beta1.AddToScheme(s))
 	return s
 }
 
@@ -69,8 +69,8 @@ func makeACSecret(name, namespace, serviceName string) *corev1.Secret {
 			Finalizers: []string{acSecretFinalizer},
 		},
 		Data: map[string][]byte{
-			keystonev1.ACIDSecretKey:     {},
-			keystonev1.ACSecretSecretKey: []byte("fake-secret"),
+			keystonev1beta1.ACIDSecretKey:     {},
+			keystonev1beta1.ACSecretSecretKey: []byte("fake-secret"),
 		},
 	}
 }
@@ -101,19 +101,19 @@ func TestCleanupUnusedRotatedSecrets_BlockedByStaleNodeSet(t *testing.T) {
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(configSecret, acSecret).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		WithObjects(nodeset).
 		Build()
 
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ac-" + serviceName,
 			Namespace: ns,
 			Annotations: map[string]string{
-				keystonev1.EDPMServiceAnnotation: "true",
+				keystonev1beta1.EDPMServiceAnnotation: "true",
 			},
 		},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{
 			SecretName:         "ac-nova-current-secret",
 			PreviousSecretName: "ac-nova-previous-secret",
 		},
@@ -159,12 +159,12 @@ func TestCleanupUnusedRotatedSecrets_ProceedsWithoutNodeSets(t *testing.T) {
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(acSecret).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		Build()
 
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{Name: "ac-" + serviceName, Namespace: ns},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{
 			SecretName:         "ac-nova-current-secret",
 			PreviousSecretName: "ac-nova-previous-secret",
 		},
@@ -217,21 +217,21 @@ func TestReconcileDelete_EDPMServiceBlockedByStaleNodeSet(t *testing.T) {
 	})
 
 	now := metav1.Now()
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "ac-" + serviceName,
 			Namespace:         ns,
 			DeletionTimestamp: &now,
 			Finalizers:        []string{finalizer},
 			Annotations: map[string]string{
-				keystonev1.EDPMServiceAnnotation: "true",
+				keystonev1beta1.EDPMServiceAnnotation: "true",
 			},
 		},
-		Spec: keystonev1.KeystoneApplicationCredentialSpec{
+		Spec: keystonev1beta1.KeystoneApplicationCredentialSpec{
 			UserName: serviceName,
 			Secret:   "osp-secret",
 		},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{ //nolint:gosec
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{ //nolint:gosec
 			SecretName: "ac-nova-abc12-secret",
 		},
 	}
@@ -241,7 +241,7 @@ func TestReconcileDelete_EDPMServiceBlockedByStaleNodeSet(t *testing.T) {
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(configSecret, nodeset).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		Build()
 
 	kclient := k8sfake.NewSimpleClientset()
@@ -294,21 +294,21 @@ func TestReconcileDelete_ProceedsWhenHashesInSync(t *testing.T) {
 	})
 
 	now := metav1.Now()
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "ac-" + serviceName,
 			Namespace:         ns,
 			DeletionTimestamp: &now,
 			Finalizers:        []string{finalizer},
 			Annotations: map[string]string{
-				keystonev1.EDPMServiceAnnotation: "false",
+				keystonev1beta1.EDPMServiceAnnotation: "false",
 			},
 		},
-		Spec: keystonev1.KeystoneApplicationCredentialSpec{
+		Spec: keystonev1beta1.KeystoneApplicationCredentialSpec{
 			UserName: serviceName,
 			Secret:   "osp-secret",
 		},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{
 			SecretName: "ac-barbican-abc12-secret",
 		},
 	}
@@ -318,7 +318,7 @@ func TestReconcileDelete_ProceedsWhenHashesInSync(t *testing.T) {
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(configSecret, nodeset).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		Build()
 
 	kclient := k8sfake.NewSimpleClientset()
@@ -368,21 +368,21 @@ func TestReconcileDelete_NonEDPMServiceProceedsDespiteStaleHashes(t *testing.T) 
 	})
 
 	now := metav1.Now()
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "ac-" + serviceName,
 			Namespace:         ns,
 			DeletionTimestamp: &now,
 			Finalizers:        []string{finalizer},
 			Annotations: map[string]string{
-				keystonev1.EDPMServiceAnnotation: "false",
+				keystonev1beta1.EDPMServiceAnnotation: "false",
 			},
 		},
-		Spec: keystonev1.KeystoneApplicationCredentialSpec{
+		Spec: keystonev1beta1.KeystoneApplicationCredentialSpec{
 			UserName: serviceName,
 			Secret:   "osp-secret",
 		},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{ //nolint:gosec
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{ //nolint:gosec
 			SecretName: "ac-heat-abc12-secret",
 		},
 	}
@@ -392,7 +392,7 @@ func TestReconcileDelete_NonEDPMServiceProceedsDespiteStaleHashes(t *testing.T) 
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(configSecret, nodeset).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		Build()
 
 	kclient := k8sfake.NewSimpleClientset()
@@ -441,18 +441,18 @@ func TestReconcileDelete_MissingAnnotationBlockedByStaleNodeSet(t *testing.T) {
 	})
 
 	now := metav1.Now()
-	instance := &keystonev1.KeystoneApplicationCredential{
+	instance := &keystonev1beta1.KeystoneApplicationCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "ac-" + serviceName,
 			Namespace:         ns,
 			DeletionTimestamp: &now,
 			Finalizers:        []string{finalizer},
 		},
-		Spec: keystonev1.KeystoneApplicationCredentialSpec{
+		Spec: keystonev1beta1.KeystoneApplicationCredentialSpec{
 			UserName: serviceName,
 			Secret:   "osp-secret",
 		},
-		Status: keystonev1.KeystoneApplicationCredentialStatus{
+		Status: keystonev1beta1.KeystoneApplicationCredentialStatus{
 			SecretName: "ac-unknown-abc12-secret",
 		},
 	}
@@ -462,7 +462,7 @@ func TestReconcileDelete_MissingAnnotationBlockedByStaleNodeSet(t *testing.T) {
 		WithScheme(s).
 		WithRESTMapper(newTestRESTMapper()).
 		WithObjects(configSecret, nodeset).
-		WithStatusSubresource(&keystonev1.KeystoneApplicationCredential{}).
+		WithStatusSubresource(&keystonev1beta1.KeystoneApplicationCredential{}).
 		Build()
 
 	kclient := k8sfake.NewSimpleClientset()

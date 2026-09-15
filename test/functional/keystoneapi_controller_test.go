@@ -34,7 +34,7 @@ import (
 
 	memcachedv1 "github.com/openstack-k8s-operators/infra-operator/apis/memcached/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	keystonev1beta1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	mariadb_test "github.com/openstack-k8s-operators/mariadb-operator/api/test/helpers"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -2516,7 +2516,7 @@ OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/open
 
 		It("should be recognized by the controller, add a finalizer and initialize Conditions", func() {
 			Eventually(func(g Gomega) {
-				ac := &keystonev1.KeystoneApplicationCredential{}
+				ac := &keystonev1beta1.KeystoneApplicationCredential{}
 				g.Expect(k8sClient.Get(ctx, acName, ac)).To(Succeed())
 
 				g.Expect(ac.Finalizers).To(ContainElement("openstack.org/applicationcredential"))
@@ -2524,7 +2524,7 @@ OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/open
 				g.Expect(ac.Status.Conditions).NotTo(BeNil())
 				found := false
 				for _, c := range ac.Status.Conditions {
-					if c.Type == keystonev1.KeystoneAPIReadyCondition {
+					if c.Type == keystonev1beta1.KeystoneAPIReadyCondition {
 						found = true
 						break
 					}
@@ -2612,7 +2612,7 @@ OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/open
 
 				for _, acName := range []types.NamespacedName{basicACName, rulesACName, unrestrictedACName} {
 					ac := GetApplicationCredential(acName)
-					keystoneCondition := ac.Status.Conditions.Get(keystonev1.KeystoneAPIReadyCondition)
+					keystoneCondition := ac.Status.Conditions.Get(keystonev1beta1.KeystoneAPIReadyCondition)
 					g.Expect(keystoneCondition).NotTo(BeNil())
 					g.Expect(keystoneCondition.Status).NotTo(Equal(corev1.ConditionTrue), "Should wait for KeystoneAPI")
 				}
@@ -2714,7 +2714,7 @@ OIDCRedirectURI "{{ .KeystoneEndpointPublic }}/v3/auth/OS-FEDERATION/websso/open
 
 			// Patch status to point to the old-style secret (simulating upgrade from old controller)
 			Eventually(func(g Gomega) {
-				ac := &keystonev1.KeystoneApplicationCredential{}
+				ac := &keystonev1beta1.KeystoneApplicationCredential{}
 				g.Expect(k8sClient.Get(ctx, acName, ac)).To(Succeed())
 				ac.Status.ACID = "old-ac-id-12345"
 				ac.Status.SecretName = oldSecretName.Name

@@ -1,0 +1,14 @@
+# The following patch adds the cert-manager CA-injection annotation to the
+# KeystoneAPI CRD so the conversion webhook's clientConfig.caBundle is populated.
+#
+# The value is the resolved serving Certificate (namePrefix keystone-operator- +
+# namespace keystone-operator-system + base name serving-cert). It is stamped
+# statically (not via kustomize replacements) on purpose: it keeps the OLM bundle
+# clean of cert-manager objects. openstack-operator rewrites the namespace for the
+# deployed namespace downstream (OSPRH-30208).
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: keystoneapis.keystone.openstack.org
+  annotations:
+    cert-manager.io/inject-ca-from: keystone-operator-system/keystone-operator-serving-cert

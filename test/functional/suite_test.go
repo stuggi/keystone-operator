@@ -40,6 +40,7 @@ import (
 	test "github.com/openstack-k8s-operators/lib-common/modules/test"
 	mariadb_test "github.com/openstack-k8s-operators/mariadb-operator/api/test/helpers"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -126,6 +127,10 @@ var _ = BeforeSuite(func() {
 				Args: []string{
 					"--service-cluster-ip-range=10.0.0.0/12", // 65k+ IPs
 					"--disable-admission-plugins=ResourceQuota,ServiceAccount,NamespaceLifecycle",
+					// Enforce owner-ref permissions so the SA owner-ref convergence
+					// tests exercise the real admission gate (a non-superuser caller
+					// needs delete on the owned resource to change its ownerReferences).
+					"--enable-admission-plugins=OwnerReferencesPermissionEnforcement",
 				},
 			},
 		},
@@ -139,6 +144,8 @@ var _ = BeforeSuite(func() {
 	Expect(cfg).NotTo(BeNil())
 
 	err = keystonev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = apiextv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = mariadbv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())

@@ -23,6 +23,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -664,7 +665,7 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 				Labels:    exportLabels,
 				Selector:  serviceLabels,
 				Port: service.GenericServicePort{
-					Name:     endpointName,
+					Name:     endpointTypeStr,
 					Port:     data.Port,
 					Protocol: corev1.ProtocolTCP,
 				},
@@ -697,9 +698,33 @@ func (r *KeystoneAPIReconciler) reconcileInit(
 				service.AnnotationIngressCreateKey: "false",
 			})
 			if svc.GetServiceType() == corev1.ServiceTypeLoadBalancer {
-				svc.AddAnnotation(map[string]string{
-					service.AnnotationHostnameKey: svc.GetServiceHostname(), // add annotation to register service name in dnsmasq
-				})
+				// Canonical dnsmasq hostname + optional CNAME alias(es) for this
+				// Service's LoadBalancer IP. When a custom endpointURL is set, its
+				// host becomes the canonical name - so a reverse-DNS lookup against
+				// the public endpoint (e.g. GSSAPI/Kerberos SPN canonicalization)
+				// resolves back to the name the external client actually used -
+				// and both in-cluster names become CNAME aliases instead. Without an
+				// endpointURL, the short in-cluster name stays canonical with its FQDN as alias.
+				dnsHostname, dnsAliases, err := service.GetVHostServerName(svcOverride, svc.GetServiceHostname())
+				if err != nil {
+					instance.Status.Conditions.Set(condition.FalseCondition(
+						condition.CreateServiceReadyCondition,
+						condition.ErrorReason,
+						condition.SeverityWarning,
+						condition.CreateServiceReadyErrorMessage,
+						err.Error()))
+
+					return ctrl.Result{}, err
+				}
+				dnsAnnotations := map[string]string{
+					service.AnnotationHostnameKey: dnsHostname, // add annotation to register service name in dnsmasq
+				}
+				if len(dnsAliases) > 0 {
+					dnsAnnotations[service.AnnotationCNAMEsKey] = strings.Join(dnsAliases, ",")
+				} else {
+					svc.RemoveAnnotation(service.AnnotationCNAMEsKey)
+				}
+				svc.AddAnnotation(dnsAnnotations)
 			}
 		}
 
@@ -1658,7 +1683,13 @@ func (r *KeystoneAPIReconciler) generateServiceConfigMaps(
 	httpdVhostConfig := map[string]any{}
 	for _, endpt := range []service.Endpoint{service.EndpointInternal, service.EndpointPublic} {
 		endptConfig := map[string]any{}
-		endptConfig["ServerName"] = fmt.Sprintf("%s-%s.%s.svc", instance.Name, endpt.String(), instance.Namespace)
+		defaultName := fmt.Sprintf("%s-%s.%s.svc", instance.Name, endpt.String(), instance.Namespace)
+		serverName, serverAliases, err := service.GetVHostServerName(instance.Spec.Override.Service[endpt], defaultName)
+		if err != nil {
+			return nil, err
+		}
+		endptConfig["ServerName"] = serverName
+		endptConfig["ServerAliases"] = serverAliases
 		endptConfig["TLS"] = false // default TLS to false, and set it bellow to true if enabled
 		if instance.Spec.TLS.API.Enabled(endpt) {
 			endptConfig["TLS"] = true

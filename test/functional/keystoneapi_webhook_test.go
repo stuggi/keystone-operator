@@ -136,6 +136,142 @@ var _ = Describe("KeystoneAPI Webhook", func() {
 		)
 	})
 
+	It("accepts a public service override port with the valid name", func() {
+		spec := GetDefaultKeystoneAPISpec()
+		spec["override"] = map[string]any{
+			"service": map[string]any{
+				"public": map[string]any{
+					"spec": map[string]any{
+						"ports": []any{
+							map[string]any{
+								"name": "public",
+								"port": 5000,
+							},
+						},
+					},
+				},
+			},
+		}
+		raw := map[string]any{
+			"apiVersion": "keystone.openstack.org/v1beta1",
+			"kind":       "KeystoneAPI",
+			"metadata": map[string]any{
+				"name":      keystoneAPIName.Name,
+				"namespace": keystoneAPIName.Namespace,
+			},
+			"spec": spec,
+		}
+		unstructuredObj := &unstructured.Unstructured{Object: raw}
+		_, err := controllerutil.CreateOrPatch(
+			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(th.DeleteInstance, GetKeystoneAPI(keystoneAPIName))
+	})
+
+	It("rejects a public service override port with the wrong name", func() {
+		spec := GetDefaultKeystoneAPISpec()
+		spec["override"] = map[string]any{
+			"service": map[string]any{
+				"public": map[string]any{
+					"spec": map[string]any{
+						"ports": []any{
+							map[string]any{
+								"name": "wrong",
+								"port": 5000,
+							},
+						},
+					},
+				},
+			},
+		}
+		raw := map[string]any{
+			"apiVersion": "keystone.openstack.org/v1beta1",
+			"kind":       "KeystoneAPI",
+			"metadata": map[string]any{
+				"name":      keystoneAPIName.Name,
+				"namespace": keystoneAPIName.Namespace,
+			},
+			"spec": spec,
+		}
+		unstructuredObj := &unstructured.Unstructured{Object: raw}
+		_, err := controllerutil.CreateOrPatch(
+			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(
+			ContainSubstring(
+				"invalid: spec.override.service.public.spec.ports[0].name: " +
+					"Invalid value: \"wrong\": must be \"public\""),
+		)
+	})
+
+	It("accepts an internal service override port with the valid name", func() {
+		spec := GetDefaultKeystoneAPISpec()
+		spec["override"] = map[string]any{
+			"service": map[string]any{
+				"internal": map[string]any{
+					"spec": map[string]any{
+						"ports": []any{
+							map[string]any{
+								"name": "internal",
+								"port": 5000,
+							},
+						},
+					},
+				},
+			},
+		}
+		raw := map[string]any{
+			"apiVersion": "keystone.openstack.org/v1beta1",
+			"kind":       "KeystoneAPI",
+			"metadata": map[string]any{
+				"name":      keystoneAPIName.Name,
+				"namespace": keystoneAPIName.Namespace,
+			},
+			"spec": spec,
+		}
+		unstructuredObj := &unstructured.Unstructured{Object: raw}
+		_, err := controllerutil.CreateOrPatch(
+			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(th.DeleteInstance, GetKeystoneAPI(keystoneAPIName))
+	})
+
+	It("rejects an internal service override port with the wrong name", func() {
+		spec := GetDefaultKeystoneAPISpec()
+		spec["override"] = map[string]any{
+			"service": map[string]any{
+				"internal": map[string]any{
+					"spec": map[string]any{
+						"ports": []any{
+							map[string]any{
+								"name": "wrong",
+								"port": 5000,
+							},
+						},
+					},
+				},
+			},
+		}
+		raw := map[string]any{
+			"apiVersion": "keystone.openstack.org/v1beta1",
+			"kind":       "KeystoneAPI",
+			"metadata": map[string]any{
+				"name":      keystoneAPIName.Name,
+				"namespace": keystoneAPIName.Namespace,
+			},
+			"spec": spec,
+		}
+		unstructuredObj := &unstructured.Unstructured{Object: raw}
+		_, err := controllerutil.CreateOrPatch(
+			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(
+			ContainSubstring(
+				"invalid: spec.override.service.internal.spec.ports[0].name: " +
+					"Invalid value: \"wrong\": must be \"internal\""),
+		)
+	})
+
 	When("A KeystoneAPI instance is updated with wrong service override endpoint", func() {
 		BeforeEach(func() {
 			spec := GetDefaultKeystoneAPISpec()
@@ -190,6 +326,28 @@ var _ = Describe("KeystoneAPI Webhook", func() {
 				ContainSubstring(
 					"invalid: spec.override.service[wrooong]: " +
 						"Invalid value: \"wrooong\": invalid endpoint type: wrooong"),
+			)
+		})
+
+		It("rejects update with a wrong public service override port name", func() {
+			KeystoneAPI := GetKeystoneAPI(keystoneAPIName)
+			Expect(KeystoneAPI).NotTo(BeNil())
+			if KeystoneAPI.Spec.Override.Service == nil {
+				KeystoneAPI.Spec.Override.Service = map[service.Endpoint]service.RoutedOverrideSpec{}
+			}
+			KeystoneAPI.Spec.Override.Service[service.EndpointPublic] = service.RoutedOverrideSpec{
+				OverrideSpec: service.OverrideSpec{
+					Spec: &service.OverrideServiceSpec{
+						Ports: []service.OverrideServicePort{{Name: "wrong", Port: 5000}},
+					},
+				},
+			}
+			err := k8sClient.Update(ctx, KeystoneAPI)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(
+				ContainSubstring(
+					"invalid: spec.override.service.public.spec.ports[0].name: " +
+						"Invalid value: \"wrong\": must be \"public\""),
 			)
 		})
 	})
